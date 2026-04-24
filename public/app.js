@@ -15,6 +15,11 @@ const pasteClear = document.getElementById('paste-clear');
 
 let sessions = [];
 let currentSessionId = null;
+const OPENING_MESSAGE =
+  '同学你好，我是你的化工过程控制实验助教。\n' +
+  '无论你是准备开始一个新实验、在操作中卡住了，还是拿到数据不知道怎么分析，都可以直接问我。' +
+  '我熟悉液位、流量、温度等典型对象的控制实验，也能帮你排查常见故障、整定 PID 参数、梳理实验报告思路。\n' +
+  '告诉我今天打算做哪个实验，或者直接描述你遇到的问题吧。';
 
 // ===== 粘贴图片管理 =====
 // 统一的"待发送图片" File 对象，来源可以是粘贴或文件选择器
@@ -292,12 +297,19 @@ async function createSession() {
   renderSessions();
   clearChat();
   sessionTitle.textContent = session.title;
-  // 新建会话后直接展示开场白
-  for (const m of session.messages || []) {
-    const node = appendMessage(m.role === 'assistant' ? 'ai' : 'user', m.content);
-    if (m.role === 'assistant' && Array.isArray(m.refs) && m.refs.length) {
-      setRefs(node, m.refs);
+
+  // 新建会话后直接显示开场白，不依赖额外点击
+  const messages = Array.isArray(session.messages) ? session.messages : [];
+  if (messages.length > 0) {
+    for (const m of messages) {
+      const node = appendMessage(m.role === 'assistant' ? 'ai' : 'user', m.content);
+      if (m.role === 'assistant' && Array.isArray(m.refs) && m.refs.length) {
+        setRefs(node, m.refs);
+      }
     }
+  } else {
+    // 后端未返回开场白时的兜底显示
+    appendMessage('ai', OPENING_MESSAGE);
   }
 }
 
