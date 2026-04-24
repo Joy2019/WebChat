@@ -89,12 +89,45 @@ body {
   width: 100vw;
   height: 100vh;
   background: var(--bg-app);
+  display: flex;
+  flex-direction: column;
+}
+
+.top-title-bar {
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--border-header);
+  background: var(--bg-app);
+  flex-shrink: 0;
+}
+
+.top-logo {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.top-title-text {
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0;
+  color: var(--text-main);
+}
+
+.app-body {
+  flex: 1;
   display: grid;
   grid-template-columns: 220px 1fr 260px;
+  min-height: 0;
 }
 
 /* 右侧栏隐藏时收起列 */
-.app.no-rightbar {
+.app.no-rightbar .app-body {
   grid-template-columns: 220px 1fr;
   overflow: hidden;
   border: 1px solid var(--border);
@@ -344,10 +377,12 @@ body {
   border-radius: 8px;
   border: 1px solid var(--border-input);
   padding: 8px 10px;
+  min-height: 120px;
   background: var(--bg-textarea);
   color: var(--text-main);
   outline: none;
   font-size: 15px;
+  line-height: 1.6;
   transition: background 0.3s, color 0.3s, border-color 0.15s;
 }
 
@@ -370,17 +405,23 @@ body {
 
 #send-btn {
   padding: 8px 18px;
-  border-radius: 8px;
-  border: none;
+  border-radius: 6px;
+  border: 1px solid #1d4ed8;
   cursor: pointer;
-  background: linear-gradient(135deg, #22c55e, #0ea5e9);
-  color: #0f172a;
+  background: #2563eb;
+  color: #ffffff;
   font-weight: 600;
   font-size: 14px;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  box-shadow: 0 8px 20px rgba(34,197,94,0.35);
+  box-shadow: none;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+#send-btn:hover {
+  background: #1d4ed8;
+  border-color: #1e40af;
 }
 
 #send-btn:disabled {

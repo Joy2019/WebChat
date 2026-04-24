@@ -85,6 +85,16 @@ if (!process.env.COZE_API_TOKEN) {
 }
 
 app.use(express.static('public'));
+const PROJECT_ASSETS_DIR = 'd:\\repository\\AIChater\\assets';
+if (fs.existsSync(PROJECT_ASSETS_DIR)) {
+  app.use('/assets', express.static(PROJECT_ASSETS_DIR));
+}
+const CURSOR_ASSETS_DIR =
+  process.env.CURSOR_ASSETS_DIR ||
+  'C:\\Users\\hdu002\\.cursor\\projects\\d-repository-AIChater\\assets';
+if (fs.existsSync(CURSOR_ASSETS_DIR)) {
+  app.use('/cursor-assets', express.static(CURSOR_ASSETS_DIR));
+}
 app.use(express.json());
 
 // 简单内存会话存储（重启会丢失）

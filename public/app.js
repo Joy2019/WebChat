@@ -69,7 +69,7 @@ pasteClear.addEventListener('click', clearPendingImage);
 
 // ===== 主题切换 =====
 const THEME_KEY = 'aichater-theme';
-let currentTheme = localStorage.getItem(THEME_KEY) || 'dark';
+let currentTheme = localStorage.getItem(THEME_KEY) || 'light';
 
 function applyTheme(theme) {
   currentTheme = theme;
@@ -242,6 +242,19 @@ function appendMessage(role, text, imageUrl) {
   return { msg, bubble, contentEl, refsEl };
 }
 
+// 模拟真实 AI 打字速度展示文本
+async function streamTextToNode(node, fullText, minDelay = 12, maxDelay = 28) {
+  const target = node?.contentEl;
+  if (!target) return;
+  let output = '';
+  for (const ch of fullText || '') {
+    output += ch;
+    renderRichText(target, output);
+    const delay = Math.floor(Math.random() * (maxDelay - minDelay + 1)) + minDelay;
+    await new Promise((resolve) => setTimeout(resolve, delay));
+  }
+}
+
 function setRefs(node, items) {
   if (!node?.refsEl) return;
   if (!Array.isArray(items) || items.length === 0) return;
@@ -302,14 +315,19 @@ async function createSession() {
   const messages = Array.isArray(session.messages) ? session.messages : [];
   if (messages.length > 0) {
     for (const m of messages) {
-      const node = appendMessage(m.role === 'assistant' ? 'ai' : 'user', m.content);
-      if (m.role === 'assistant' && Array.isArray(m.refs) && m.refs.length) {
+      const role = m.role === 'assistant' ? 'ai' : 'user';
+      const node = appendMessage(role, role === 'ai' ? '' : m.content);
+      if (role === 'ai') {
+        await streamTextToNode(node, m.content || '');
+      }
+      if (role === 'ai' && Array.isArray(m.refs) && m.refs.length) {
         setRefs(node, m.refs);
       }
     }
   } else {
     // 后端未返回开场白时的兜底显示
-    appendMessage('ai', OPENING_MESSAGE);
+    const node = appendMessage('ai', '');
+    await streamTextToNode(node, OPENING_MESSAGE);
   }
 }
 
