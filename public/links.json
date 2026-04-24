@@ -1,0 +1,8 @@
+{
+  "visible": false,
+  "links": [
+    { "name": "作业票证系统", "url": "https://example.com" },
+    { "name": "公司制度库",   "url": "https://example.com" },
+    { "name": "培训平台",     "url": "https://example.com" }
+  ]
+}

@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>特殊作业AI助手</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="app">
+      <aside class="sidebar">
+        <div class="sidebar-header">
+          <div>
+            <div class="brand">特殊作业AI助手</div>
+            <div class="sub"></div>
+          </div>
+          <button id="new-session-btn" class="ghost">新增会话</button>
+        </div>
+        <div id="session-list" class="session-list"></div>
+      </aside>
+
+      <div class="main">
+        <header class="app-header">
+          <div>
+            <h2 id="session-title">选择左侧会话</h2>
+            <span class="sub">支持文本 + 图片，流式回复</span>
+          </div>
+          <button id="theme-btn" class="ghost theme-btn" title="切换主题">🌙 暗色</button>
+        </header>
+
+        <main class="chat-container">
+          <div id="chat-window" class="chat-window"></div>
+
+          <div class="input-panel">
+            <!-- 粘贴/选择图片预览区 -->
+            <div id="paste-preview" class="paste-preview" style="display:none;">
+              <img id="paste-thumb" alt="待发送图片" />
+              <button id="paste-clear" class="paste-clear" title="移除图片">✕</button>
+            </div>
+
+            <div class="input-row">
+              <textarea
+                id="user-input"
+                placeholder="输入你的问题（Enter 发送，Shift+Enter 换行，可直接粘贴图片）..."
+                rows="2"
+              ></textarea>
+            </div>
+
+            <div class="input-tools">
+              <label class="file-label">
+                📎 选择图片:
+                <input type="file" id="image-input" accept="image/*" />
+              </label>
+
+              <button id="send-btn">发送</button>
+            </div>
+          </div>
+        </main>
+      </div>
+
+      <aside class="rightbar">
+        <div class="rightbar-header">第三方链接</div>
+        <div id="link-list" class="link-list"></div>
+      </aside>
+    </div>
+
+    <div id="image-modal" class="image-modal">
+      <img id="image-modal-img" alt="预览图片" />
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
+

@@ -1,0 +1,26 @@
+# 环境变量（含 API Key，禁止提交）
+.env
+
+# Node 依赖
+node_modules/
+
+# 图片上传临时目录（保留目录结构，忽略内容）
+uploads/*
+!uploads/.gitkeep
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 编辑器
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 日志
+*.log
+npm-debug.log*
+
+# 测试覆盖率
+coverage/
