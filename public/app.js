@@ -292,6 +292,13 @@ async function createSession() {
   renderSessions();
   clearChat();
   sessionTitle.textContent = session.title;
+  // 新建会话后直接展示开场白
+  for (const m of session.messages || []) {
+    const node = appendMessage(m.role === 'assistant' ? 'ai' : 'user', m.content);
+    if (m.role === 'assistant' && Array.isArray(m.refs) && m.refs.length) {
+      setRefs(node, m.refs);
+    }
+  }
 }
 
 async function switchSession(id) {

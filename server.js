@@ -89,6 +89,11 @@ app.use(express.json());
 
 // 简单内存会话存储（重启会丢失）
 const sessions = [];
+const OPENING_MESSAGE =
+  '同学你好，我是你的化工过程控制实验助教。\n' +
+  '无论你是准备开始一个新实验、在操作中卡住了，还是拿到数据不知道怎么分析，都可以直接问我。' +
+  '我熟悉液位、流量、温度等典型对象的控制实验，也能帮你排查常见故障、整定 PID 参数、梳理实验报告思路。\n' +
+  '告诉我今天打算做哪个实验，或者直接描述你遇到的问题吧。';
 
 function safeJsonParse(maybeJson) {
   if (typeof maybeJson !== 'string') return maybeJson;
@@ -140,7 +145,20 @@ app.post('/sessions', (req, res) => {
   const id = randomUUID();
   const title = (req.body?.title || '新会话').slice(0, 50);
   const now = Date.now();
-  const session = { id, title, createdAt: now, updatedAt: now, messages: [] };
+  const session = {
+    id,
+    title,
+    createdAt: now,
+    updatedAt: now,
+    messages: [
+      {
+        role: 'assistant',
+        content: OPENING_MESSAGE,
+        refs: [],
+        ts: now,
+      },
+    ],
+  };
   sessions.unshift(session);
   res.json(session);
 });

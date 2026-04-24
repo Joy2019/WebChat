@@ -115,8 +115,19 @@ body {
 .sidebar-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 8px;
+}
+
+.sidebar-actions {
+  padding-top: 4px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--border-header);
+  padding-bottom: 10px;
+}
+
+.new-session-btn {
+  width: 100%;
 }
 
 .brand {

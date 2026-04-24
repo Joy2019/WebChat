@@ -1,4 +1,4 @@
-# AIChater — 基于 Coze API 的 AI 多模态对话界面
+# 过程控制实验AI智能助手 — 基于 Coze API 的 AI 多模态对话界面
 
 > 纯 HTML + CSS + JS 前端，Node.js + Express 后端，接入 [Coze](https://www.coze.cn) 开放平台，支持**流式对话、图片上传、知识库命中文件超链接展示、多会话管理、第三方链接区域、暗/亮主题切换**。
 
@@ -195,7 +195,7 @@ sudo apt-get install -y nginx
 
 ```bash
 # 上传代码到服务器（scp / git clone / rsync 均可）
-git clone https://your-repo/AIChater.git /var/www/AIChater
+git clone https://github.com/Joy2019/WebChat.git /var/www/AIChater
 cd /var/www/AIChater
 
 # 安装依赖
