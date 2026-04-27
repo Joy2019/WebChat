@@ -21,9 +21,12 @@
         <aside class="sidebar">
           <div class="sidebar-header">
             <div class="brand">会话列表</div>
+            <button id="new-session-icon-btn" class="ghost sidebar-toggle-btn new-session-icon-btn" title="新增会话">＋</button>
+            <button id="sidebar-toggle-btn" class="ghost sidebar-toggle-btn" title="收起/展开会话栏">☰</button>
           </div>
           <div class="sidebar-actions">
             <button id="new-session-btn" class="ghost new-session-btn">新增会话</button>
+            <button id="clear-sessions-btn" class="ghost clear-sessions-btn">一键清空</button>
           </div>
           <div id="session-list" class="session-list"></div>
         </aside>
@@ -31,13 +34,14 @@
         <div class="main">
           <header class="app-header">
             <div>
-              <h2 id="session-title">选择左侧会话</h2>
-              <span class="sub">支持文本 + 图片，流式回复</span>
+              <h2 id="session-title">AI智能助手</h2>
+              <span class="sub">7X24小时智能伴学</span>
             </div>
             <button id="theme-btn" class="ghost theme-btn" title="切换主题">🌙 暗色</button>
           </header>
 
           <main class="chat-container">
+            <button id="clear-current-btn" class="ghost clear-current-btn" title="清空当前会话">🧹</button>
             <div id="chat-window" class="chat-window"></div>
 
             <div class="input-panel">
@@ -53,15 +57,17 @@
                   placeholder="输入你的问题（Enter 发送，Shift+Enter 换行，可直接粘贴图片）..."
                   rows="2"
                 ></textarea>
-              </div>
-
-              <div class="input-tools">
-                <label class="file-label">
-                  📎 选择图片:
-                  <input type="file" id="image-input" accept="image/*" />
-                </label>
-
-                <button id="send-btn">发送</button>
+                <div class="input-actions">
+                  <label class="upload-trigger" for="file-input" title="添加图片">
+                    <span class="upload-icon">+</span>
+                  </label>
+                  <button id="send-btn">发送</button>
+                </div>
+                <input
+                  type="file"
+                  id="file-input"
+                  accept="image/*"
+                />
               </div>
             </div>
           </main>

@@ -105,6 +105,15 @@ const OPENING_MESSAGE =
   '我熟悉液位、流量、温度等典型对象的控制实验，也能帮你排查常见故障、整定 PID 参数、梳理实验报告思路。\n' +
   '告诉我今天打算做哪个实验，或者直接描述你遇到的问题吧。';
 
+function buildSessionTitleFromQuestion(text) {
+  const src = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!src) return '新会话';
+  const firstClause = src.split(/[。！？!?，,；;：:\n]/)[0].trim();
+  const picked = firstClause || src;
+  if (picked.length <= 16) return picked;
+  return `${picked.slice(0, 16)}...`;
+}
+
 function safeJsonParse(maybeJson) {
   if (typeof maybeJson !== 'string') return maybeJson;
   try {
@@ -192,6 +201,52 @@ app.get('/sessions/:id', (req, res) => {
   res.json(session);
 });
 
+// 清空单个会话消息
+app.delete('/sessions/:id/messages', (req, res) => {
+  const session = sessions.find((s) => s.id === req.params.id);
+  if (!session) {
+    res.status(404).json({ error: 'session not found' });
+    return;
+  }
+  session.messages = [];
+  session.updatedAt = Date.now();
+  res.json({ ok: true });
+});
+
+// 重命名会话
+app.patch('/sessions/:id', (req, res) => {
+  const session = sessions.find((s) => s.id === req.params.id);
+  if (!session) {
+    res.status(404).json({ error: 'session not found' });
+    return;
+  }
+  const nextTitle = (req.body?.title || '').trim().slice(0, 50);
+  if (!nextTitle) {
+    res.status(400).json({ error: 'title is required' });
+    return;
+  }
+  session.title = nextTitle;
+  session.updatedAt = Date.now();
+  res.json(session);
+});
+
+// 删除单个会话
+app.delete('/sessions/:id', (req, res) => {
+  const idx = sessions.findIndex((s) => s.id === req.params.id);
+  if (idx === -1) {
+    res.status(404).json({ error: 'session not found' });
+    return;
+  }
+  sessions.splice(idx, 1);
+  res.json({ ok: true });
+});
+
+// 清空全部会话
+app.delete('/sessions', (_req, res) => {
+  sessions.splice(0, sessions.length);
+  res.json({ ok: true });
+});
+
 // 纯文本+可选图片，流式响应
 app.post('/chat/stream', upload.single('image'), async (req, res) => {
   try {
@@ -205,15 +260,22 @@ app.post('/chat/stream', upload.single('image'), async (req, res) => {
     const message = (req.body?.message || '').trim();
     const file = req.file;
 
-    // 图片处理：优先上传到公开图床取公开 URL，避免 Coze 内部受保护链接
+    // 文件处理：仅支持图片
     let publicImageUrl = null;
     let fileObj = null;
+    const isImageFile = !!(file?.mimetype && file.mimetype.startsWith('image/'));
+
+    if (file && !isImageFile) {
+      fs.unlink(file.path, () => {});
+      res.status(400).json({ error: 'only image upload is supported' });
+      return;
+    }
 
     if (file) {
-      // Step 1：尝试上传到公开图床（imgbb / smms）
+      // Step 1：若是图片，尝试上传到公开图床（imgbb / smms）
       publicImageUrl = await uploadImageToPublicHost(file.path, file.mimetype);
 
-      // Step 2：若公开图床失败，降级用 Coze Files API（file_id，可能有权限问题）
+      // Step 2：公开图床失败时，上传 Coze Files API
       if (!publicImageUrl) {
         try {
           const stream = fs.createReadStream(file.path);
@@ -249,6 +311,12 @@ app.post('/chat/stream', upload.single('image'), async (req, res) => {
           content: message,
           content_type: 'text',
         };
+
+    // 用户第一问后，自动将暂定标题改成问题关键词短语
+    const userMessageCount = session.messages.filter((m) => m.role === 'user').length;
+    if (session.title === '新会话' && userMessageCount === 0 && message) {
+      session.title = buildSessionTitleFromQuestion(message);
+    }
 
     // 保存用户消息到会话
     session.messages.push({ role: 'user', content: message, image: hasImage, ts: Date.now() });

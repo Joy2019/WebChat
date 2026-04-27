@@ -1,10 +1,13 @@
 const chatWindow = document.getElementById('chat-window');
 const userInput = document.getElementById('user-input');
-const imageInput = document.getElementById('image-input');
+const fileInput = document.getElementById('file-input');
 const sendBtn = document.getElementById('send-btn');
 const sessionList = document.getElementById('session-list');
 const newSessionBtn = document.getElementById('new-session-btn');
+const newSessionIconBtn = document.getElementById('new-session-icon-btn');
+const clearSessionsBtn = document.getElementById('clear-sessions-btn');
 const sessionTitle = document.getElementById('session-title');
+const sidebarToggleBtn = document.getElementById('sidebar-toggle-btn');
 const imageModal = document.getElementById('image-modal');
 const imageModalImg = document.getElementById('image-modal-img');
 const linkList = document.getElementById('link-list');
@@ -12,6 +15,9 @@ const themeBtn = document.getElementById('theme-btn');
 const pastePreview = document.getElementById('paste-preview');
 const pasteThumb = document.getElementById('paste-thumb');
 const pasteClear = document.getElementById('paste-clear');
+const clearCurrentBtn = document.getElementById('clear-current-btn');
+const ASSISTANT_NAME = 'AI智能助手';
+const USER_NAME = '学员';
 
 let sessions = [];
 let currentSessionId = null;
@@ -23,25 +29,26 @@ const OPENING_MESSAGE =
 
 // ===== 粘贴图片管理 =====
 // 统一的"待发送图片" File 对象，来源可以是粘贴或文件选择器
-let pendingImageFile = null;
+let pendingAttachmentFile = null;
+const SIDEBAR_COLLAPSE_KEY = 'aichater-sidebar-collapsed';
 
-function setPendingImage(file) {
+function setPendingAttachment(file) {
   if (!file || !file.type.startsWith('image/')) return;
-  pendingImageFile = file;
-  pasteThumb.src = URL.createObjectURL(file);
+  pendingAttachmentFile = file;
   pastePreview.style.display = 'inline-flex';
-  // 同步清空文件选择器，避免和粘贴图片冲突
-  imageInput.value = '';
+  pasteThumb.src = URL.createObjectURL(file);
+  pasteThumb.alt = file.name || 'attachment';
+  fileInput.value = '';
 }
 
-function clearPendingImage() {
+function clearPendingAttachment() {
   if (pasteThumb.src && pasteThumb.src.startsWith('blob:')) {
     URL.revokeObjectURL(pasteThumb.src);
   }
-  pendingImageFile = null;
+  pendingAttachmentFile = null;
   pasteThumb.src = '';
   pastePreview.style.display = 'none';
-  imageInput.value = '';
+  fileInput.value = '';
 }
 
 // Ctrl+V 粘贴图片
@@ -52,20 +59,40 @@ userInput.addEventListener('paste', (e) => {
     if (item.type.startsWith('image/')) {
       e.preventDefault(); // 阻止图片变成文字插入
       const file = item.getAsFile();
-      if (file) setPendingImage(file);
+      if (file) setPendingAttachment(file);
       return;
     }
   }
 });
 
-// 文件选择器也走统一 pendingImageFile
-imageInput.addEventListener('change', () => {
-  const file = imageInput.files && imageInput.files[0];
-  if (file) setPendingImage(file);
+// 文件选择器也走统一 pendingAttachmentFile
+fileInput.addEventListener('change', () => {
+  const file = fileInput.files && fileInput.files[0];
+  if (file) setPendingAttachment(file);
 });
 
 // 移除预览
-pasteClear.addEventListener('click', clearPendingImage);
+pasteClear.addEventListener('click', clearPendingAttachment);
+
+// ===== 会话栏收起/展开 =====
+function applySidebarCollapsed(collapsed) {
+  const appEl = document.querySelector('.app');
+  if (collapsed) {
+    appEl.classList.add('sidebar-collapsed');
+    sidebarToggleBtn.textContent = '☷';
+  } else {
+    appEl.classList.remove('sidebar-collapsed');
+    sidebarToggleBtn.textContent = '☰';
+  }
+  localStorage.setItem(SIDEBAR_COLLAPSE_KEY, collapsed ? '1' : '0');
+}
+
+sidebarToggleBtn.addEventListener('click', () => {
+  const appEl = document.querySelector('.app');
+  applySidebarCollapsed(!appEl.classList.contains('sidebar-collapsed'));
+});
+
+applySidebarCollapsed(localStorage.getItem(SIDEBAR_COLLAPSE_KEY) === '1');
 
 // ===== 主题切换 =====
 const THEME_KEY = 'aichater-theme';
@@ -197,7 +224,7 @@ function appendMessage(role, text, imageUrl) {
 
   const tag = document.createElement('div');
   tag.className = 'role-tag';
-  tag.textContent = role === 'user' ? '你' : 'AI';
+  tag.textContent = role === 'user' ? USER_NAME : ASSISTANT_NAME;
 
   const contentEl = document.createElement('div');
   if (role === 'user') {
@@ -291,25 +318,70 @@ function renderSessions() {
     const title = document.createElement('div');
     title.className = 'session-title';
     title.textContent = s.title || '未命名会话';
+    title.title = s.title || '未命名会话';
 
+    const actions = document.createElement('div');
+    actions.className = 'session-actions';
+
+    const renameBtn = document.createElement('button');
+    renameBtn.className = 'session-action-btn';
+    renameBtn.title = '重命名';
+    renameBtn.textContent = '✎';
+    renameBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const nextTitle = prompt('输入新的会话名称', s.title || '新会话');
+      if (!nextTitle || !nextTitle.trim()) return;
+      try {
+        const res = await fetch(`/sessions/${s.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title: nextTitle.trim() }),
+        });
+        if (!res.ok) throw new Error(await res.text());
+        await fetchSessions();
+      } catch (err) {
+        alert(`重命名失败：${err?.message || String(err)}`);
+      }
+    });
+
+    const delBtn = document.createElement('button');
+    delBtn.className = 'session-action-btn danger';
+    delBtn.title = '删除会话';
+    delBtn.textContent = '🗑';
+    delBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (!confirm('确认删除该会话？')) return;
+      try {
+        const res = await fetch(`/sessions/${s.id}`, { method: 'DELETE' });
+        if (!res.ok) throw new Error(await res.text());
+        if (currentSessionId === s.id) {
+          currentSessionId = null;
+          clearChat();
+        }
+        await fetchSessions();
+      } catch (err) {
+        alert(`删除失败：${err?.message || String(err)}`);
+      }
+    });
+
+    actions.appendChild(renameBtn);
+    actions.appendChild(delBtn);
     item.appendChild(title);
+    item.appendChild(actions);
     sessionList.appendChild(item);
   });
 }
 
 async function createSession() {
-  const title = prompt('会话名称', '新会话') || '新会话';
   const res = await fetch('/sessions', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title }),
   });
   const session = await res.json();
   currentSessionId = session.id;
   sessions.unshift(session);
   renderSessions();
   clearChat();
-  sessionTitle.textContent = session.title;
+  sessionTitle.textContent = ASSISTANT_NAME;
 
   // 新建会话后直接显示开场白，不依赖额外点击
   const messages = Array.isArray(session.messages) ? session.messages : [];
@@ -335,7 +407,7 @@ async function switchSession(id) {
   currentSessionId = id;
   const res = await fetch(`/sessions/${id}`);
   const session = await res.json();
-  sessionTitle.textContent = session.title || '会话';
+  sessionTitle.textContent = ASSISTANT_NAME;
   renderSessions();
   clearChat();
   for (const m of session.messages) {
@@ -353,8 +425,8 @@ async function sendMessage() {
   }
 
   const text = userInput.value.trim();
-  // 优先使用统一的 pendingImageFile（来自粘贴或文件选择器）
-  const file = pendingImageFile || (imageInput.files && imageInput.files[0]);
+  // 优先使用统一的 pendingAttachmentFile（来自粘贴或文件选择器）
+  const file = pendingAttachmentFile || (fileInput.files && fileInput.files[0]);
 
   if (!text && !file) return;
 
@@ -363,7 +435,7 @@ async function sendMessage() {
 
   // 立即清空输入框和图片预览，不等响应完成
   userInput.value = '';
-  clearPendingImage();
+  clearPendingAttachment();
   sendBtn.disabled = true;
 
   try {
@@ -389,10 +461,10 @@ async function sendMessage() {
     let refs = [];
     const aiNode = appendMessage('ai', '');
 
-    // 等待效果（AI 正在回复...）
+    // 等待效果（AI智能助手 正在回复...）
     const typing = document.createElement('div');
     typing.className = 'typing';
-    typing.innerHTML = `AI 正在回复 <span class="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span>`;
+    typing.innerHTML = `${ASSISTANT_NAME} 正在回复 <span class="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span>`;
     aiNode.contentEl.appendChild(typing);
 
     while (true) {
@@ -458,6 +530,35 @@ userInput.addEventListener('keydown', (e) => {
 });
 
 newSessionBtn.addEventListener('click', createSession);
+newSessionIconBtn.addEventListener('click', createSession);
+clearSessionsBtn.addEventListener('click', async () => {
+  if (!confirm('确认清空全部会话？此操作不可恢复。')) return;
+  try {
+    const res = await fetch('/sessions', { method: 'DELETE' });
+    if (!res.ok) throw new Error(await res.text());
+    currentSessionId = null;
+    clearChat();
+    await fetchSessions();
+  } catch (err) {
+    alert(`清空失败：${err?.message || String(err)}`);
+  }
+});
+
+clearCurrentBtn.addEventListener('click', async () => {
+  if (!currentSessionId) {
+    alert('请先选择会话');
+    return;
+  }
+  if (!confirm('确认清空当前会话内容？')) return;
+  try {
+    const res = await fetch(`/sessions/${currentSessionId}/messages`, { method: 'DELETE' });
+    if (!res.ok) throw new Error(await res.text());
+    clearChat();
+    await fetchSessions();
+  } catch (err) {
+    alert(`清空失败：${err?.message || String(err)}`);
+  }
+});
 
 async function loadLinks() {
   const rightbar = document.querySelector('.rightbar');
