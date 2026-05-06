@@ -306,6 +306,10 @@ async function fetchSessions() {
   const res = await fetch('/sessions');
   sessions = await res.json();
   renderSessions();
+  // 没有任何会话时自动新建一条（首次打开、清空全部、删除最后一条等）
+  if (sessions.length === 0) {
+    await createSession();
+  }
 }
 
 function renderSessions() {
