@@ -309,6 +309,13 @@ async function fetchSessions() {
   // 没有任何会话时自动新建一条（首次打开、清空全部、删除最后一条等）
   if (sessions.length === 0) {
     await createSession();
+    return;
+  }
+  // 尚未选中、或当前 id 已不在列表中时，默认选中首条（通常为最新），保证可直接对话
+  const hasCurrent =
+    currentSessionId && sessions.some((s) => s.id === currentSessionId);
+  if (!hasCurrent) {
+    await switchSession(sessions[0].id);
   }
 }
 
@@ -603,6 +610,12 @@ async function loadLinks() {
   }
 }
 
-// 初始化
+// 初始化（等待会话列表/自动新建完成后再交互，避免未选中会话就发送）
 loadLinks();
-fetchSessions();
+(async () => {
+  try {
+    await fetchSessions();
+  } catch (e) {
+    console.error('会话列表加载失败', e);
+  }
+})();
