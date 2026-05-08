@@ -196,7 +196,8 @@ body {
 
 .app.sidebar-collapsed .brand,
 .app.sidebar-collapsed .sidebar-actions,
-.app.sidebar-collapsed .session-title {
+.app.sidebar-collapsed .session-title,
+.app.sidebar-collapsed .quick-ask-panel {
   display: none;
 }
 
@@ -242,6 +243,85 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.quick-ask-panel {
+  border-top: 1px solid var(--border-header);
+  padding-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 320px;
+}
+
+.quick-ask-header {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.quick-ask-list {
+  max-height: 260px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-right: 2px;
+}
+
+.quick-ask-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.quick-ask-group-title {
+  font-size: 12px;
+  color: var(--text-sub);
+}
+
+.quick-ask-item {
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-session);
+  color: var(--text-main);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1.45;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.quick-ask-item:hover {
+  border-color: rgba(99, 102, 241, 0.8);
+  background: rgba(99, 102, 241, 0.12);
+}
+
+.guide-entry-btn {
+  margin-top: auto;
+  padding: 14px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(250, 204, 21, 0.75);
+  background: linear-gradient(135deg, rgba(250, 204, 21, 0.18), rgba(249, 115, 22, 0.2));
+  color: var(--text-main);
+  cursor: pointer;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  box-shadow: 0 6px 18px rgba(249, 115, 22, 0.2);
+}
+
+.guide-entry-btn:hover {
+  border-color: rgba(250, 204, 21, 1);
+  background: linear-gradient(135deg, rgba(250, 204, 21, 0.28), rgba(249, 115, 22, 0.3));
+}
+
+.guide-entry-title {
+  font-size: 16px;
+  font-weight: 700;
 }
 
 .session-item {
@@ -682,4 +762,111 @@ body {
   border-radius: 12px;
   box-shadow: 0 24px 80px rgba(0,0,0,0.6);
   background: var(--modal-img-bg);
+}
+
+/* ===== 指导书弹窗 ===== */
+.guide-modal {
+  position: fixed;
+  inset: 0;
+  background: var(--modal-bg);
+  backdrop-filter: blur(4px);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 1100;
+}
+
+.guide-modal.open {
+  display: flex;
+}
+
+.guide-modal-panel {
+  width: min(560px, 90vw);
+  max-height: 80vh;
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(99,102,241,0.05)), var(--bg-app);
+  box-shadow: 0 26px 90px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: guideModalPop 0.22s ease-out;
+}
+
+.guide-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.35);
+  background: linear-gradient(90deg, rgba(99, 102, 241, 0.18), rgba(14, 165, 233, 0.12));
+}
+
+.guide-modal-title {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.guide-modal-close {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid var(--border-input);
+  background: transparent;
+  color: var(--text-main);
+  cursor: pointer;
+}
+
+.guide-modal-close:hover {
+  background: rgba(148, 163, 184, 0.15);
+}
+
+.guide-modal-list {
+  padding: 14px 16px 16px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.guide-pdf-link {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 11px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-session);
+  color: var(--text-link);
+  text-decoration: none;
+  font-size: 14px;
+  transition: border-color 0.15s, background 0.15s, transform 0.15s;
+}
+
+.guide-pdf-link::before {
+  content: '📄';
+  margin-right: 8px;
+  font-size: 14px;
+}
+
+.guide-pdf-link:hover {
+  border-color: rgba(99, 102, 241, 0.85);
+  background: rgba(99, 102, 241, 0.12);
+  transform: translateY(-1px);
+}
+
+.guide-modal-empty {
+  font-size: 14px;
+  color: var(--text-sub);
+}
+
+@keyframes guideModalPop {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }

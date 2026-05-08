@@ -16,6 +16,11 @@ const pastePreview = document.getElementById('paste-preview');
 const pasteThumb = document.getElementById('paste-thumb');
 const pasteClear = document.getElementById('paste-clear');
 const clearCurrentBtn = document.getElementById('clear-current-btn');
+const quickAskList = document.getElementById('quick-ask-list');
+const guideEntryBtn = document.getElementById('guide-entry-btn');
+const guideModal = document.getElementById('guide-modal');
+const guideModalClose = document.getElementById('guide-modal-close');
+const guideModalList = document.getElementById('guide-modal-list');
 const ASSISTANT_NAME = 'AI智能助手';
 const USER_NAME = '学员';
 
@@ -31,6 +36,91 @@ const OPENING_MESSAGE =
 // 统一的"待发送图片" File 对象，来源可以是粘贴或文件选择器
 let pendingAttachmentFile = null;
 const SIDEBAR_COLLAPSE_KEY = 'aichater-sidebar-collapsed';
+const QUICK_ASK_QUESTIONS = [
+  {
+    group: '基本概念与原理',
+    items: [
+      '一阶系统和二阶系统的阶跃响应有什么区别？',
+      '积分饱和是什么？怎么避免？',
+      '临界比例度法的整定步骤是怎样的？',
+    ],
+  },
+  {
+    group: '实验操作',
+    items: [
+      '上水箱液位 PID 控制实验怎么开车？',
+      '加热水箱温度控制实验怎么设定参数比较合适？',
+      '管道压力定值控制实验有哪些关键操作节点？',
+    ],
+  },
+];
+
+function renderQuickAsk() {
+  if (!quickAskList) return;
+  quickAskList.innerHTML = '';
+
+  for (const section of QUICK_ASK_QUESTIONS) {
+    const group = document.createElement('div');
+    group.className = 'quick-ask-group';
+
+    const title = document.createElement('div');
+    title.className = 'quick-ask-group-title';
+    title.textContent = section.group;
+    group.appendChild(title);
+
+    for (const question of section.items) {
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'quick-ask-item';
+      item.textContent = question;
+      item.title = question;
+      item.addEventListener('click', async () => {
+        if (sendBtn.disabled) return;
+        userInput.value = question;
+        await sendMessage();
+      });
+      group.appendChild(item);
+    }
+
+    quickAskList.appendChild(group);
+  }
+}
+
+async function openGuideModal() {
+  if (!guideModal || !guideModalList) return;
+  guideModal.classList.add('open');
+  guideModalList.innerHTML = '<div class="guide-modal-empty">加载中...</div>';
+  try {
+    const res = await fetch('/assets/pdfs', { cache: 'no-store' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const items = Array.isArray(data?.items) ? data.items : [];
+    guideModalList.innerHTML = '';
+
+    if (items.length === 0) {
+      guideModalList.innerHTML = '<div class="guide-modal-empty">未找到 PDF 文件</div>';
+      return;
+    }
+
+    for (const pdf of items) {
+      const a = document.createElement('a');
+      a.className = 'guide-pdf-link';
+      a.href = pdf.url;
+      const rawName = pdf.name || pdf.url;
+      a.textContent = String(rawName).replace(/\.pdf$/i, '');
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      guideModalList.appendChild(a);
+    }
+  } catch (err) {
+    guideModalList.innerHTML = `<div class="guide-modal-empty">加载失败：${err?.message || String(err)}</div>`;
+  }
+}
+
+function closeGuideModal() {
+  if (!guideModal) return;
+  guideModal.classList.remove('open');
+}
 
 function setPendingAttachment(file) {
   if (!file || !file.type.startsWith('image/')) return;
@@ -571,6 +661,12 @@ clearCurrentBtn.addEventListener('click', async () => {
   }
 });
 
+guideEntryBtn?.addEventListener('click', openGuideModal);
+guideModalClose?.addEventListener('click', closeGuideModal);
+guideModal?.addEventListener('click', (e) => {
+  if (e.target === guideModal) closeGuideModal();
+});
+
 async function loadLinks() {
   const rightbar = document.querySelector('.rightbar');
   const appEl = document.querySelector('.app');
@@ -612,6 +708,7 @@ async function loadLinks() {
 
 // 初始化（等待会话列表/自动新建完成后再交互，避免未选中会话就发送）
 loadLinks();
+renderQuickAsk();
 (async () => {
   try {
     await fetchSessions();

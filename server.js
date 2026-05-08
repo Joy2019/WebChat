@@ -159,6 +159,25 @@ function extractRecallItems(partData) {
   return [];
 }
 
+async function listPdfFilesInDir(rootDir) {
+  const results = [];
+  const stack = [''];
+  while (stack.length > 0) {
+    const relDir = stack.pop();
+    const absDir = relDir ? `${rootDir}\\${relDir}` : rootDir;
+    const entries = await fs.promises.readdir(absDir, { withFileTypes: true });
+    for (const entry of entries) {
+      const relPath = relDir ? `${relDir}\\${entry.name}` : entry.name;
+      if (entry.isDirectory()) {
+        stack.push(relPath);
+      } else if (entry.isFile() && /\.pdf$/i.test(entry.name)) {
+        results.push(relPath);
+      }
+    }
+  }
+  return results;
+}
+
 // 创建新会话
 app.post('/sessions', (req, res) => {
   const id = randomUUID();
@@ -199,6 +218,29 @@ app.get('/sessions/:id', (req, res) => {
     return;
   }
   res.json(session);
+});
+
+// 获取 assets 目录下所有 PDF 文件
+app.get('/assets/pdfs', async (_req, res) => {
+  try {
+    if (!fs.existsSync(PROJECT_ASSETS_DIR)) {
+      res.json({ items: [] });
+      return;
+    }
+    const paths = await listPdfFilesInDir(PROJECT_ASSETS_DIR);
+    const items = paths
+      .sort((a, b) => a.localeCompare(b, 'zh-CN'))
+      .map((relPath) => {
+        const webPath = relPath.replace(/\\/g, '/');
+        return {
+          name: webPath.split('/').pop(),
+          url: `/assets/${encodeURI(webPath)}`,
+        };
+      });
+    res.json({ items });
+  } catch (err) {
+    res.status(500).json({ error: err?.message || String(err) });
+  }
 });
 
 // 清空单个会话消息

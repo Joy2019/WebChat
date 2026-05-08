@@ -29,6 +29,13 @@
             <button id="clear-sessions-btn" class="ghost clear-sessions-btn">一键清空</button>
           </div>
           <div id="session-list" class="session-list"></div>
+          <div class="quick-ask-panel">
+            <div class="quick-ask-header">快速提问</div>
+            <div id="quick-ask-list" class="quick-ask-list"></div>
+          </div>
+          <button id="guide-entry-btn" class="guide-entry-btn" type="button" title="查看实验指导书">
+            <span class="guide-entry-title">查看实验指导书</span>
+          </button>
         </aside>
 
         <div class="main">
@@ -82,6 +89,15 @@
 
     <div id="image-modal" class="image-modal">
       <img id="image-modal-img" alt="预览图片" />
+    </div>
+    <div id="guide-modal" class="guide-modal">
+      <div class="guide-modal-panel">
+        <div class="guide-modal-header">
+          <div class="guide-modal-title">实验指导书列表</div>
+          <button id="guide-modal-close" class="guide-modal-close" type="button" title="关闭">✕</button>
+        </div>
+        <div id="guide-modal-list" class="guide-modal-list"></div>
+      </div>
     </div>
 
     <script src="app.js"></script>
