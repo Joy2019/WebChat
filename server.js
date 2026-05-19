@@ -4,13 +4,25 @@ import dotenv from 'dotenv';
 import { CozeAPI, COZE_COM_BASE_URL, COZE_CN_BASE_URL, RoleType, ChatEventType } from '@coze/api';
 import fs from 'fs';
 import { randomUUID } from 'crypto';
-import FormData from 'form-data';
+import FormDataNode from 'form-data';
+import os from 'os';
+import path from 'path';
+import https from 'https';
+import selfsigned from 'selfsigned';
+import { Blob } from 'node:buffer';
+import { spawn } from 'child_process';
+import axios from 'axios';
+import { createUploadTrace, readUploadLogTail } from './lib/upload-trace.js';
 
 dotenv.config();
 
+const DEBUG_UPLOAD = process.env.DEBUG_UPLOAD === '1' || process.env.DEBUG_UPLOAD === 'true';
+const COZE_BASE =
+  (process.env.COZE_REGION || 'com').toLowerCase() === 'cn' ? COZE_CN_BASE_URL : COZE_COM_BASE_URL;
+
 // ===== 图片公开 URL 上传（绕过 Coze 内部受保护链接问题）=====
 // 优先使用 imgbb（需配置 IMGBB_API_KEY），次选 smms（国内，无需 Key），均失败降级 file_id
-async function uploadImageToPublicHost(filePath, mimeType) {
+async function uploadImageToPublicHost(filePath, mimeType, traceLog) {
   const imgbbKey = process.env.IMGBB_API_KEY;
 
   // 方案 1：imgbb（需要 Key，图片永久保存，推荐）
@@ -28,47 +40,291 @@ async function uploadImageToPublicHost(filePath, mimeType) {
       });
       const json = await r.json();
       if (json?.success && json?.data?.url) {
-        console.log(`[IMAGE] imgbb upload ok: ${json.data.url}`);
+        traceLog?.('imgbb_ok', { url: json.data.url });
         return json.data.url;
       }
-      console.warn('[IMAGE] imgbb failed:', JSON.stringify(json).slice(0, 200));
+      traceLog?.('imgbb_fail', { body: json });
     } catch (e) {
-      console.warn('[IMAGE] imgbb error:', e.message);
+      traceLog?.('imgbb_error', { error: e.message });
     }
+  } else {
+    traceLog?.('imgbb_skip', { message: '未配置 IMGBB_API_KEY' });
   }
 
-  // 方案 2：sm.ms（国内图床，无需 Key，但有频率限制）
+  // 方案 2：catbox（免 Key，返回直链）
   try {
-    const form = new FormData();
-    form.append('smfile', fs.createReadStream(filePath), {
+    const form = new FormDataNode();
+    form.append('reqtype', 'fileupload');
+    form.append('fileToUpload', fs.createReadStream(filePath), {
       filename: 'image.jpg',
       contentType: mimeType || 'image/jpeg',
     });
-    const r = await fetch('https://sm.ms/api/v2/upload', {
-      method: 'POST',
+    const r = await axios.post('https://catbox.moe/user/api.php', form, {
       headers: form.getHeaders(),
-      body: form,
+      timeout: 60000,
+      maxBodyLength: Infinity,
+      proxy: false,
+      validateStatus: () => true,
     });
-    const json = await r.json();
-    if (json?.success && json?.data?.url) {
-      console.log(`[IMAGE] smms upload ok: ${json.data.url}`);
-      return json.data.url;
+    const url = String(r.data || '').trim();
+    if (/^https?:\/\//i.test(url)) {
+      traceLog?.('catbox_ok', { url });
+      return url;
     }
-    // smms 重复图片返回 image_repeated，url 在 images 字段
-    if (json?.images) {
-      console.log(`[IMAGE] smms repeated, url: ${json.images}`);
-      return json.images;
-    }
-    console.warn('[IMAGE] smms failed:', JSON.stringify(json).slice(0, 200));
+    traceLog?.('catbox_fail', { status: r.status, body: url.slice(0, 200) });
   } catch (e) {
-    console.warn('[IMAGE] smms error:', e.message);
+    traceLog?.('catbox_error', { error: e.message });
   }
 
-  return null; // 全部失败，调用方降级使用 file_id
+  return null;
+}
+
+async function sniffFileKind(filePath) {
+  const buf = Buffer.alloc(16);
+  const fh = await fs.promises.open(filePath, 'r');
+  try {
+    await fh.read(buf, 0, 16, 0);
+  } finally {
+    await fh.close();
+  }
+  if (buf[0] === 0xff && buf[1] === 0xd8) return { kind: 'image', mime: 'image/jpeg', ext: '.jpg' };
+  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) {
+    return { kind: 'image', mime: 'image/png', ext: '.png' };
+  }
+  if (buf[0] === 0x47 && buf[1] === 0x49 && buf[2] === 0x46) {
+    return { kind: 'image', mime: 'image/gif', ext: '.gif' };
+  }
+  if (buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46 && buf[8] === 0x57) {
+    return { kind: 'image', mime: 'image/webp', ext: '.webp' };
+  }
+  // ISO BMFF：偏移 4–7 为 "ftyp"
+  if (buf[4] === 0x66 && buf[5] === 0x74 && buf[6] === 0x79 && buf[7] === 0x70) {
+    const brand = buf.toString('ascii', 8, 12);
+    if (['heic', 'heif', 'mif1', 'msf1'].includes(brand)) {
+      return { kind: 'image', mime: 'image/heic', ext: '.heic' };
+    }
+    if (['mp42', 'isom', 'qt  ', 'avc1', 'M4V '].includes(brand)) {
+      return { kind: 'video', mime: 'video/mp4', ext: '.mp4' };
+    }
+  }
+  return { kind: 'unknown', mime: 'application/octet-stream', ext: '' };
+}
+
+function extractCozeFileId(result) {
+  if (!result) return null;
+  if (result.code !== undefined && result.code !== 0) {
+    throw new Error(result.msg || `coze upload error code ${result.code}`);
+  }
+  if (result.id) return result.id;
+  if (result.data?.id) return result.data.id;
+  return null;
+}
+
+function resolveCozeUploadMeta(mimeType, sniff) {
+  const sniffMime = sniff?.mime || '';
+  const declared = mimeType || sniffMime || 'image/jpeg';
+
+  if (declared === 'image/png' || sniff.ext === '.png') {
+    return { uploadMime: 'image/png', filename: 'upload.png' };
+  }
+  if (declared === 'image/gif' || sniff.ext === '.gif') {
+    return { uploadMime: 'image/gif', filename: 'upload.gif' };
+  }
+  if (declared === 'image/webp' || sniff.ext === '.webp') {
+    return { uploadMime: 'image/webp', filename: 'upload.webp' };
+  }
+  if (declared === 'image/heic' || declared === 'image/heif' || sniff.ext === '.heic') {
+    return { uploadMime: declared, filename: `upload${sniff.ext || '.heic'}` };
+  }
+  return { uploadMime: 'image/jpeg', filename: 'upload.jpg' };
+}
+
+/** Coze 官方 multipart：字段名 file；必须用 globalThis.FormData（勿与 form-data 包混淆） */
+async function uploadImageToCozeViaNativeFetch(filePath, filename, uploadMime, traceLog) {
+  const buffer = await fs.promises.readFile(filePath);
+  const form = new globalThis.FormData();
+  form.append('file', new Blob([buffer], { type: uploadMime }), filename);
+
+  const url = `${COZE_BASE}/v1/files/upload`;
+  traceLog?.('coze_native_req', { url, filename, uploadMime });
+
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${process.env.COZE_API_TOKEN}` },
+    body: form,
+  });
+  const text = await resp.text();
+  let json = null;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    json = { raw: text.slice(0, 500) };
+  }
+  traceLog?.('coze_native', { status: resp.status, body: json });
+  if (!resp.ok) {
+    throw new Error(`Coze HTTP ${resp.status}: ${text.slice(0, 300)}`);
+  }
+  const id = extractCozeFileId(json);
+  if (!id) throw new Error('Coze 未返回 file_id');
+  return { id, raw: json };
+}
+
+/** axios + Buffer multipart（备用；禁用系统代理避免 400 HTML） */
+async function uploadImageToCozeViaAxios(filePath, filename, uploadMime, traceLog) {
+  const buffer = await fs.promises.readFile(filePath);
+  const form = new FormDataNode();
+  form.append('file', buffer, { filename, contentType: uploadMime });
+  const url = `${COZE_BASE}/v1/files/upload`;
+  const resp = await axios.post(url, form, {
+    headers: {
+      Authorization: `Bearer ${process.env.COZE_API_TOKEN}`,
+      ...form.getHeaders(),
+    },
+    maxBodyLength: Infinity,
+    proxy: false,
+    validateStatus: () => true,
+    responseType: 'json',
+    transformResponse: [(data, headers) => {
+      const ct = headers?.['content-type'] || '';
+      if (ct.includes('application/json') && typeof data === 'string') {
+        try {
+          return JSON.parse(data);
+        } catch {
+          return data;
+        }
+      }
+      return data;
+    }],
+  });
+  const body =
+    typeof resp.data === 'object' && resp.data !== null
+      ? resp.data
+      : { raw: String(resp.data || '').slice(0, 500) };
+  traceLog?.('coze_axios', { status: resp.status, url, body });
+  if (resp.status < 200 || resp.status >= 300) {
+    throw new Error(`Coze HTTP ${resp.status}: ${JSON.stringify(body).slice(0, 300)}`);
+  }
+  if (body.raw) {
+    throw new Error(`Coze 非 JSON 响应: ${body.raw.slice(0, 200)}`);
+  }
+  const id = extractCozeFileId(body);
+  if (!id) throw new Error('Coze axios 未返回 file_id');
+  return { id, raw: body };
+}
+
+async function uploadImageToCoze(filePath, originalName, mimeType, traceLog) {
+  const sniff = await sniffFileKind(filePath);
+  const { uploadMime, filename } = resolveCozeUploadMeta(mimeType, sniff);
+  const stat = await fs.promises.stat(filePath);
+
+  traceLog?.('coze_prepare', {
+    originalName,
+    declaredMime: mimeType,
+    sniff,
+    uploadMime,
+    filename,
+    bytes: stat.size,
+    cozeBase: COZE_BASE,
+  });
+
+  try {
+    const result = await uploadImageToCozeViaNativeFetch(filePath, filename, uploadMime, traceLog);
+    traceLog?.('coze_ok', { fileId: result.id, via: 'native' });
+    return result;
+  } catch (nativeErr) {
+    traceLog?.('coze_native_fail', { error: nativeErr?.message || String(nativeErr) });
+  }
+
+  const result = await uploadImageToCozeViaAxios(filePath, filename, uploadMime, traceLog);
+  traceLog?.('coze_ok', { fileId: result.id, via: 'axios' });
+  return result;
 }
 
 const app = express();
-const upload = multer({ dest: 'uploads/' });
+fs.mkdirSync('uploads', { recursive: true });
+
+const IMAGE_EXTENSIONS = new Set([
+  '.jpg',
+  '.jpeg',
+  '.png',
+  '.gif',
+  '.webp',
+  '.bmp',
+  '.heic',
+  '.heif',
+]);
+
+function isVideoUpload(file) {
+  if (!file) return false;
+  if (file.mimetype && file.mimetype.startsWith('video/')) return true;
+  const ext = path.extname(file.originalname || '').toLowerCase();
+  return ['.mp4', '.mov', '.webm', '.avi', '.mkv', '.m4v', '.3gp'].includes(ext);
+}
+
+function isImageUpload(file) {
+  if (!file) return false;
+  if (isVideoUpload(file)) return false;
+  if (file.mimetype && file.mimetype.startsWith('image/')) return true;
+  const ext = path.extname(file.originalname || '').toLowerCase();
+  return IMAGE_EXTENSIONS.has(ext);
+}
+
+function resolveImageMime(file, sniff) {
+  if (sniff?.mime) return sniff.mime;
+  if (file.mimetype && file.mimetype.startsWith('image/')) return file.mimetype;
+  const ext = path.extname(file.originalname || '').toLowerCase();
+  const map = {
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.png': 'image/png',
+    '.gif': 'image/gif',
+    '.webp': 'image/webp',
+    '.bmp': 'image/bmp',
+    '.heic': 'image/heic',
+    '.heif': 'image/heif',
+  };
+  return map[ext] || 'image/jpeg';
+}
+
+const upload = multer({
+  dest: 'uploads/',
+  limits: { fileSize: 20 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (isVideoUpload(file)) {
+      cb(new Error('不支持视频，请选择照片'));
+      return;
+    }
+    if (isImageUpload(file) || !file.mimetype || file.mimetype === 'application/octet-stream') {
+      cb(null, true);
+      return;
+    }
+    cb(new Error('仅支持图片，不支持视频'));
+  },
+});
+
+function multerSingle(fieldName) {
+  return (req, res, next) => {
+    upload.single(fieldName)(req, res, (err) => {
+      if (err) {
+        const { log, finish, id } = createUploadTrace({ route: '/chat/stream', phase: 'multer' });
+        log('multer_reject', {
+          error: err.message,
+          mimetype: req.headers['content-type'],
+        });
+        finish({ ok: false });
+        if (!res.headersSent) {
+          res.status(400).json({
+            error: err.message || '文件被拒绝',
+            uploadId: id,
+            ...(DEBUG_UPLOAD ? { debug: { steps: [{ step: 'multer_reject', error: err.message }] } } : {}),
+          });
+        }
+        return;
+      }
+      next();
+    });
+  };
+}
 
 const region = (process.env.COZE_REGION || 'com').toLowerCase();
 const client = new CozeAPI({
@@ -247,57 +503,147 @@ app.delete('/sessions', (_req, res) => {
   res.json({ ok: true });
 });
 
+if (DEBUG_UPLOAD) {
+  app.get('/api/debug/upload-log', (_req, res) => {
+    const tail = Number(_req.query.tail) || 60;
+    res.json({ lines: readUploadLogTail(tail) });
+  });
+}
+
+app.get('/api/health', (_req, res) => {
+  res.json({
+    ok: true,
+    debugUpload: DEBUG_UPLOAD,
+    cozeToken: !!process.env.COZE_API_TOKEN,
+    cozeBot: !!BOT_ID,
+    imgbb: !!process.env.IMGBB_API_KEY,
+    https: process.env.ENABLE_HTTPS !== '0',
+    tunnel: process.env.ENABLE_LOCALTUNNEL === '1',
+  });
+});
+
 // 纯文本+可选图片，流式响应
-app.post('/chat/stream', upload.single('image'), async (req, res) => {
+app.post('/chat/stream', multerSingle('image'), async (req, res) => {
+  const uploadTrace = createUploadTrace({ route: '/chat/stream' });
+  const { log, finish, id: uploadId, trace } = uploadTrace;
+
   try {
     const sessionId = req.body?.sessionId;
     const session = sessions.find((s) => s.id === sessionId);
     if (!session) {
-      res.status(400).json({ error: 'invalid sessionId' });
+      res.status(400).json({ error: 'invalid sessionId', uploadId });
       return;
     }
 
     const message = (req.body?.message || '').trim();
     const file = req.file;
 
-    // 文件处理：仅支持图片
-    let publicImageUrl = null;
-    let fileObj = null;
-    const isImageFile = !!(file?.mimetype && file.mimetype.startsWith('image/'));
+    log('request', {
+      sessionId,
+      hasMessage: !!message,
+      hasFileField: !!file,
+      contentType: req.headers['content-type'],
+    });
 
-    if (file && !isImageFile) {
-      fs.unlink(file.path, () => {});
-      res.status(400).json({ error: 'only image upload is supported' });
+    if (!message && !file) {
+      res.status(400).json({ error: 'message or image is required', uploadId });
       return;
     }
 
-    if (file) {
-      // Step 1：若是图片，尝试上传到公开图床（imgbb / smms）
-      publicImageUrl = await uploadImageToPublicHost(file.path, file.mimetype);
+    // 文件处理：仅支持图片
+    let publicImageUrl = null;
+    let fileObj = null;
 
-      // Step 2：公开图床失败时，上传 Coze Files API
-      if (!publicImageUrl) {
-        try {
-          const stream = fs.createReadStream(file.path);
-          fileObj = await client.files.upload({ file: stream });
-          console.log(`[FILE] fallback to file_id: ${fileObj.id}`);
-        } catch (uploadErr) {
-          console.error('[FILE] upload failed:', uploadErr?.message);
-        }
+    if (file) {
+      log('multer_ok', {
+        originalname: file.originalname,
+        mimetype: file.mimetype,
+        size: file.size,
+        path: file.path,
+      });
+
+      const sniff = await sniffFileKind(file.path);
+      log('sniff', sniff);
+
+      if (sniff.kind === 'video') {
+        fs.unlink(file.path, () => {});
+        finish({ ok: false, reason: 'video' });
+        res.status(400).json({
+          error: '不支持视频，请选择照片',
+          uploadId,
+          ...(DEBUG_UPLOAD ? { debug: trace } : {}),
+        });
+        return;
+      }
+      if (sniff.kind !== 'image' && !isImageUpload(file)) {
+        fs.unlink(file.path, () => {});
+        finish({ ok: false, reason: 'not_image', sniff });
+        res.status(400).json({
+          error: '仅支持图片，请选择 JPG/PNG 等照片',
+          uploadId,
+          ...(DEBUG_UPLOAD ? { debug: trace } : {}),
+        });
+        return;
+      }
+
+      const imageMime = resolveImageMime(file, sniff);
+      const originalName = file.originalname || `image${sniff.ext || '.jpg'}`;
+
+      try {
+        const cozeResult = await uploadImageToCoze(file.path, originalName, imageMime, log);
+        fileObj = cozeResult;
+        log('coze_done', { fileId: cozeResult.id });
+      } catch (uploadErr) {
+        log('coze_all_fail', { error: uploadErr?.message || String(uploadErr) });
+      }
+
+      try {
+        const hostMime =
+          imageMime === 'image/heic' || imageMime === 'image/heif' ? 'image/jpeg' : imageMime;
+        publicImageUrl = await uploadImageToPublicHost(file.path, hostMime, log);
+      } catch (hostErr) {
+        log('public_host_exception', { error: hostErr?.message });
       }
 
       fs.unlink(file.path, () => {});
+    } else if (message) {
+      log('text_only', {});
+    } else {
+      log('no_file', { hint: '客户端未收到 image 字段，检查 FormData 字段名是否为 image' });
     }
 
-    const hasImage = !!(publicImageUrl || fileObj);
+    const cozeFileId = fileObj?.id || null;
+    const hasImage = !!(publicImageUrl || cozeFileId);
+
+    if (file && !hasImage) {
+      finish({
+        ok: false,
+        cozeFileId,
+        publicImageUrl,
+        cozeToken: !!process.env.COZE_API_TOKEN,
+      });
+      res.status(400).json({
+        error: '图片上传失败，请换一张 JPG/PNG 照片（相册请点「照片」不要选视频）',
+        uploadId,
+        hint: '服务端日志见 logs/upload-*.log，或开启 DEBUG_UPLOAD=1 后查看返回的 debug 字段',
+        ...(DEBUG_UPLOAD ? { debug: trace } : {}),
+      });
+      return;
+    }
+
+    log('upload_success', {
+      via: publicImageUrl ? 'public_url' : cozeFileId ? 'file_id' : 'none',
+      cozeFileId,
+      publicImageUrl: publicImageUrl ? publicImageUrl.slice(0, 80) : null,
+    });
 
     // 构造消息内容
     const contentParts = [];
     if (message) contentParts.push({ type: 'text', text: message });
     if (publicImageUrl) {
       contentParts.push({ type: 'image', file_url: publicImageUrl });
-    } else if (fileObj) {
-      contentParts.push({ type: 'image', file_id: fileObj.id });
+    } else if (cozeFileId) {
+      contentParts.push({ type: 'image', file_id: cozeFileId });
     }
 
     const userMessage = hasImage
@@ -408,8 +754,147 @@ app.post('/chat/stream', upload.single('image'), async (req, res) => {
   }
 });
 
-const PORT = Number(process.env.PORT || 3000);
-app.listen(PORT, () => {
-  console.log(`Server listening at http://localhost:${PORT}`);
+app.use((err, req, res, next) => {
+  if (!err) return next();
+  console.error('[ERROR]', err.message || err);
+  if (res.headersSent) return next(err);
+  res.status(400).json({ error: err.message || 'request failed' });
 });
+
+const HTTPS_PORT = Number(process.env.HTTPS_PORT || 3000);
+let HTTP_PORT = Number(process.env.HTTP_PORT || process.env.PORT || 3001);
+// 避免与 HTTPS 同端口（.env 里 PORT=3000 时自动挪到 3001）
+if (HTTP_PORT === HTTPS_PORT) {
+  HTTP_PORT = HTTPS_PORT === 3000 ? 3001 : HTTPS_PORT + 1;
+}
+const HOST = process.env.HOST || '0.0.0.0';
+
+function getLanAddresses() {
+  const nets = os.networkInterfaces();
+  const addrs = [];
+  for (const name of Object.keys(nets)) {
+    for (const net of nets[name] || []) {
+      if (net.family === 'IPv4' && !net.internal) {
+        addrs.push(net.address);
+      }
+    }
+  }
+  return addrs;
+}
+
+function printAccessUrls(scheme, port) {
+  console.log(`  Local:   ${scheme}://localhost:${port}`);
+  const lan = getLanAddresses();
+  if (lan.length) {
+    console.log(`  Mobile (${scheme}, same Wi‑Fi):`);
+    for (const ip of lan) {
+      console.log(`           ${scheme}://${ip}:${port}`);
+    }
+  }
+}
+
+function printTunnelBanner(label, url) {
+  console.log('');
+  console.log('========== 免费公网 HTTPS（浏览器信任，可测语音）==========');
+  console.log(`  ${label}: ${url}`);
+  console.log('  手机用流量或任意网络打开即可；图片上传日志 logs/upload-*.log');
+  console.log('========================================================');
+}
+
+function withTimeout(promise, ms, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      setTimeout(() => reject(new Error(`${label} 超时 (${ms}ms)`)), ms);
+    }),
+  ]);
+}
+
+async function startLocalTunnel(port) {
+  try {
+    const mod = await import('localtunnel');
+    const localtunnel = mod.default || mod;
+    const opts = { port };
+    if (process.env.TUNNEL_SUBDOMAIN) opts.subdomain = process.env.TUNNEL_SUBDOMAIN;
+    const tunnel = await withTimeout(localtunnel(opts), 20000, 'localtunnel');
+    printTunnelBanner('Localtunnel', tunnel.url);
+    tunnel.on('error', (err) => console.error('[TUNNEL] error:', err.message));
+    tunnel.on('close', () => console.warn('[TUNNEL] closed'));
+    return true;
+  } catch (e) {
+    console.warn('[TUNNEL] localtunnel 不可用:', e.message);
+    return false;
+  }
+}
+
+function startCloudflaredTunnel(port) {
+  const npx = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+  const child = spawn(npx, ['-y', 'cloudflared', 'tunnel', '--url', `http://127.0.0.1:${port}`], {
+    shell: true,
+    windowsHide: true,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  let printed = false;
+  const onChunk = (buf) => {
+    const text = buf.toString();
+    const m = text.match(/https:\/\/[a-zA-Z0-9-]+\.trycloudflare\.com/);
+    if (m && !printed) {
+      printed = true;
+      printTunnelBanner('Cloudflare 临时证书', m[0]);
+    }
+  };
+  child.stdout?.on('data', onChunk);
+  child.stderr?.on('data', onChunk);
+  child.on('error', (err) => {
+    console.warn('[TUNNEL] cloudflared 启动失败:', err.message);
+    console.warn('[TUNNEL] 请手动执行: npx -y cloudflared tunnel --url http://127.0.0.1:' + port);
+  });
+  setTimeout(() => {
+    if (!printed) {
+      console.warn(
+        '[TUNNEL] cloudflared 60s 内未输出 URL。可手动运行:\n' +
+          `  npx -y cloudflared tunnel --url http://127.0.0.1:${port}`
+      );
+    }
+  }, 60000);
+}
+
+async function startPublicHttpsTunnel(port) {
+  if (process.env.ENABLE_LOCALTUNNEL !== '1' && process.env.ENABLE_CLOUDFLARED !== '1') return;
+  const ok = await startLocalTunnel(port);
+  if (!ok) startCloudflaredTunnel(port);
+}
+
+app.listen(HTTP_PORT, HOST, () => {
+  console.log(`HTTP  listening on ${HOST}:${HTTP_PORT}`);
+  printAccessUrls('http', HTTP_PORT);
+  if (process.env.DEBUG_UPLOAD === undefined) {
+    console.log('[TIP] 图片上传排错：在 .env 设置 DEBUG_UPLOAD=1，失败时响应含 uploadId 与 debug');
+  }
+  if (DEBUG_UPLOAD) {
+    console.log('[DEBUG] DEBUG_UPLOAD=1，失败响应含详细步骤；GET /api/debug/upload-log');
+  }
+  startPublicHttpsTunnel(HTTP_PORT);
+});
+
+const ENABLE_HTTPS = process.env.ENABLE_HTTPS !== '0';
+
+if (ENABLE_HTTPS) {
+  const altNames = [{ type: 2, value: 'localhost' }];
+  for (const ip of getLanAddresses()) {
+    altNames.push({ type: 7, ip });
+  }
+  const pems = selfsigned.generate([{ name: 'commonName', value: 'AIChater' }], {
+    days: 365,
+    keySize: 2048,
+    extensions: [{ name: 'subjectAltName', altNames }],
+  });
+  https
+    .createServer({ key: pems.private, cert: pems.cert }, app)
+    .listen(HTTPS_PORT, HOST, () => {
+      console.log(`HTTPS listening on ${HOST}:${HTTPS_PORT}（手机语音+聊天请用此地址）`);
+      printAccessUrls('https', HTTPS_PORT);
+    });
+}
 

@@ -2,7 +2,13 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, viewport-fit=cover"
+    />
+    <meta name="format-detection" content="telephone=no, email=no" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <title>过程控制实验AI智能助手</title>
     <link rel="stylesheet" href="style.css" />
   </head>
@@ -18,6 +24,7 @@
       </header>
 
       <div class="app-body">
+        <div id="sidebar-backdrop" class="sidebar-backdrop" aria-hidden="true"></div>
         <aside class="sidebar">
           <div class="sidebar-header">
             <div class="brand">会话列表</div>
@@ -33,11 +40,20 @@
 
         <div class="main">
           <header class="app-header">
-            <div>
+            <button
+              id="mobile-menu-btn"
+              type="button"
+              class="ghost mobile-menu-btn"
+              aria-label="打开会话列表"
+              title="会话列表"
+            >☰</button>
+            <div class="app-header-main">
               <h2 id="session-title">AI智能助手</h2>
               <span class="sub">7X24小时智能伴学</span>
             </div>
-            <button id="theme-btn" class="ghost theme-btn" title="切换主题">🌙 暗色</button>
+            <div class="app-header-actions">
+              <button id="theme-btn" class="ghost theme-btn" title="切换主题">🌙 暗色</button>
+            </div>
           </header>
 
           <main class="chat-container">
@@ -54,27 +70,39 @@
               <div class="input-row">
                 <textarea
                   id="user-input"
-                  placeholder="输入你的问题（Enter 发送，Shift+Enter 换行，可直接粘贴图片）..."
+                  placeholder="输入问题，可直接粘贴图片…"
                   rows="2"
                 ></textarea>
                 <div class="input-actions">
-                  <label class="upload-trigger" for="file-input" title="添加图片">
+                  <button
+                    type="button"
+                    id="voice-input-btn"
+                    class="voice-input-btn"
+                    title="按住说话"
+                    aria-label="按住说话"
+                  >🎤</button>
+                  <button type="button" id="upload-btn" class="upload-trigger" title="添加图片">
                     <span class="upload-icon">+</span>
-                  </label>
+                  </button>
                   <button id="send-btn">发送</button>
                 </div>
                 <input
                   type="file"
                   id="file-input"
-                  accept="image/*"
+                  accept="image/jpeg,image/png,image/gif,image/webp,image/*"
+                  hidden
                 />
               </div>
             </div>
           </main>
         </div>
 
+        <div id="links-backdrop" class="links-backdrop" aria-hidden="true"></div>
         <aside class="rightbar">
-          <div class="rightbar-header">第三方链接</div>
+          <div class="rightbar-header">
+            <span>第三方链接</span>
+            <button id="links-drawer-close" type="button" class="ghost links-drawer-close" aria-label="关闭">✕</button>
+          </div>
           <div id="link-list" class="link-list"></div>
         </aside>
       </div>
