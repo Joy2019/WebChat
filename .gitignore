@@ -19,6 +19,7 @@ Thumbs.db
 *.swo
 
 # 日志
+logs/
 *.log
 npm-debug.log*
 

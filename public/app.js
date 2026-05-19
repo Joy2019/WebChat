@@ -16,8 +16,13 @@ const pastePreview = document.getElementById('paste-preview');
 const pasteThumb = document.getElementById('paste-thumb');
 const pasteClear = document.getElementById('paste-clear');
 const clearCurrentBtn = document.getElementById('clear-current-btn');
+const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+const sidebarBackdrop = document.getElementById('sidebar-backdrop');
+const voiceInputBtn = document.getElementById('voice-input-btn');
+const uploadBtn = document.getElementById('upload-btn');
 const ASSISTANT_NAME = 'AI智能助手';
 const USER_NAME = '学员';
+const MOBILE_MQ = window.matchMedia('(max-width: 768px)');
 
 let sessions = [];
 let currentSessionId = null;
@@ -32,13 +37,126 @@ const OPENING_MESSAGE =
 let pendingAttachmentFile = null;
 const SIDEBAR_COLLAPSE_KEY = 'aichater-sidebar-collapsed';
 
-function setPendingAttachment(file) {
-  if (!file || !file.type.startsWith('image/')) return;
-  pendingAttachmentFile = file;
-  pastePreview.style.display = 'inline-flex';
-  pasteThumb.src = URL.createObjectURL(file);
-  pasteThumb.alt = file.name || 'attachment';
-  fileInput.value = '';
+function isVideoFile(file) {
+  if (!file) return false;
+  if (file.type && file.type.startsWith('video/')) return true;
+  const name = (file.name || '').toLowerCase();
+  return /\.(mp4|mov|webm|avi|mkv|m4v|3gp)$/i.test(name);
+}
+
+function isImageFile(file) {
+  if (!file) return false;
+  if (isVideoFile(file)) return false;
+  if (file.type && file.type.startsWith('image/')) return true;
+  const name = (file.name || '').toLowerCase();
+  return /\.(jpe?g|png|gif|webp|bmp|heic|heif)$/i.test(name);
+}
+
+/** 移动端相册 HEIC 等格式转为 JPEG，提升上传成功率 */
+async function prepareImageForUpload(file) {
+  if (!file) return null;
+  const isJpeg =
+    file.type === 'image/jpeg' ||
+    file.type === 'image/jpg' ||
+    /\.jpe?g$/i.test(file.name || '');
+  if (isJpeg && file.size < 3 * 1024 * 1024) {
+    return file;
+  }
+
+  try {
+    if (typeof createImageBitmap === 'function') {
+      const bitmap = await createImageBitmap(file);
+      const maxSide = 1920;
+      let w = bitmap.width;
+      let h = bitmap.height;
+      if (w > maxSide || h > maxSide) {
+        const scale = Math.min(maxSide / w, maxSide / h);
+        w = Math.round(w * scale);
+        h = Math.round(h * scale);
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      canvas.getContext('2d').drawImage(bitmap, 0, 0, w, h);
+      bitmap.close?.();
+      const blob = await new Promise((resolve, reject) => {
+        canvas.toBlob(
+          (b) => (b ? resolve(b) : reject(new Error('toBlob failed'))),
+          'image/jpeg',
+          0.88
+        );
+      });
+      const base = (file.name || 'photo').replace(/\.[^.]+$/i, '');
+      return new File([blob], `${base}.jpg`, { type: 'image/jpeg' });
+    }
+
+    // 兼容旧 WebView
+    const url = URL.createObjectURL(file);
+    try {
+      const img = await new Promise((resolve, reject) => {
+        const el = new Image();
+        el.onload = () => resolve(el);
+        el.onerror = reject;
+        el.src = url;
+      });
+      const maxSide = 1920;
+      let w = img.naturalWidth;
+      let h = img.naturalHeight;
+      if (w > maxSide || h > maxSide) {
+        const scale = Math.min(maxSide / w, maxSide / h);
+        w = Math.round(w * scale);
+        h = Math.round(h * scale);
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      const blob = await new Promise((resolve, reject) => {
+        canvas.toBlob(
+          (b) => (b ? resolve(b) : reject(new Error('toBlob failed'))),
+          'image/jpeg',
+          0.88
+        );
+      });
+      const base = (file.name || 'photo').replace(/\.[^.]+$/i, '');
+      return new File([blob], `${base}.jpg`, { type: 'image/jpeg' });
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  } catch (e) {
+    console.warn('[image] compress failed, use original', e);
+    return file;
+  }
+}
+
+async function setPendingAttachment(file) {
+  if (isVideoFile(file)) {
+    alert('不支持视频，请只选择照片');
+    fileInput.value = '';
+    return;
+  }
+  if (!isImageFile(file)) {
+    alert('请选择图片（JPG/PNG 等），不要选视频');
+    fileInput.value = '';
+    return;
+  }
+  try {
+    sendBtn.disabled = true;
+    const prepared = await prepareImageForUpload(file);
+    pendingAttachmentFile = prepared;
+    pastePreview.style.display = 'inline-flex';
+    if (pasteThumb.src && pasteThumb.src.startsWith('blob:')) {
+      URL.revokeObjectURL(pasteThumb.src);
+    }
+    pasteThumb.src = URL.createObjectURL(prepared);
+    pasteThumb.alt = prepared.name || 'attachment';
+    fileInput.value = '';
+  } catch (e) {
+    console.error(e);
+    alert('图片处理失败，请换一张 JPG/PNG 照片');
+  } finally {
+    sendBtn.disabled = false;
+  }
 }
 
 function clearPendingAttachment() {
@@ -65,7 +183,13 @@ userInput.addEventListener('paste', (e) => {
   }
 });
 
-// 文件选择器也走统一 pendingAttachmentFile
+// 文件选择器也走统一 pendingAttachmentFile（按钮触发，兼容移动端）
+uploadBtn?.addEventListener('click', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  fileInput.click();
+});
+
 fileInput.addEventListener('change', () => {
   const file = fileInput.files && fileInput.files[0];
   if (file) setPendingAttachment(file);
@@ -74,7 +198,27 @@ fileInput.addEventListener('change', () => {
 // 移除预览
 pasteClear.addEventListener('click', clearPendingAttachment);
 
-// ===== 会话栏收起/展开 =====
+// ===== 会话栏收起/展开（桌面）与抽屉（移动端 H5）=====
+function isMobileLayout() {
+  return MOBILE_MQ.matches;
+}
+
+function syncBodyScrollLock() {
+  const appEl = document.querySelector('.app');
+  document.body.classList.toggle('scroll-lock', appEl.classList.contains('sidebar-mobile-open'));
+}
+
+function setMobileSidebarOpen(open) {
+  const appEl = document.querySelector('.app');
+  appEl.classList.toggle('sidebar-mobile-open', !!open);
+  syncBodyScrollLock();
+}
+
+function closeMobileOverlays() {
+  if (!isMobileLayout()) return;
+  setMobileSidebarOpen(false);
+}
+
 function applySidebarCollapsed(collapsed) {
   const appEl = document.querySelector('.app');
   if (collapsed) {
@@ -87,12 +231,36 @@ function applySidebarCollapsed(collapsed) {
   localStorage.setItem(SIDEBAR_COLLAPSE_KEY, collapsed ? '1' : '0');
 }
 
+function initSidebarState() {
+  const appEl = document.querySelector('.app');
+  appEl.classList.remove('sidebar-mobile-open');
+  syncBodyScrollLock();
+  if (isMobileLayout()) {
+    applySidebarCollapsed(false);
+  } else {
+    applySidebarCollapsed(localStorage.getItem(SIDEBAR_COLLAPSE_KEY) === '1');
+  }
+}
+
 sidebarToggleBtn.addEventListener('click', () => {
   const appEl = document.querySelector('.app');
+  if (isMobileLayout()) {
+    setMobileSidebarOpen(!appEl.classList.contains('sidebar-mobile-open'));
+    return;
+  }
   applySidebarCollapsed(!appEl.classList.contains('sidebar-collapsed'));
 });
 
-applySidebarCollapsed(localStorage.getItem(SIDEBAR_COLLAPSE_KEY) === '1');
+mobileMenuBtn?.addEventListener('click', () => setMobileSidebarOpen(true));
+sidebarBackdrop?.addEventListener('click', () => setMobileSidebarOpen(false));
+
+let resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(initSidebarState, 150);
+});
+
+initSidebarState();
 
 // ===== 主题切换 =====
 const THEME_KEY = 'aichater-theme';
@@ -412,6 +580,7 @@ async function createSession() {
     const node = appendMessage('ai', '');
     await streamTextToNode(node, OPENING_MESSAGE);
   }
+  closeMobileOverlays();
 }
 
 async function switchSession(id) {
@@ -427,6 +596,7 @@ async function switchSession(id) {
       setRefs(node, m.refs);
     }
   }
+  closeMobileOverlays();
 }
 
 async function sendMessage() {
@@ -436,10 +606,22 @@ async function sendMessage() {
   }
 
   const text = userInput.value.trim();
-  // 优先使用统一的 pendingAttachmentFile（来自粘贴或文件选择器）
-  const file = pendingAttachmentFile || (fileInput.files && fileInput.files[0]);
+  let file = pendingAttachmentFile || (fileInput.files && fileInput.files[0]);
 
   if (!text && !file) return;
+
+  sendBtn.disabled = true;
+  try {
+    if (file) {
+      file = await prepareImageForUpload(file);
+      pendingAttachmentFile = file;
+    }
+  } catch (e) {
+    console.error(e);
+    alert('图片处理失败，请换一张 JPG/PNG 照片');
+    sendBtn.disabled = false;
+    return;
+  }
 
   const localImgUrl = file ? URL.createObjectURL(file) : null;
   appendMessage('user', text, localImgUrl);
@@ -453,7 +635,15 @@ async function sendMessage() {
     const formData = new FormData();
     formData.append('sessionId', currentSessionId);
     if (text) formData.append('message', text);
-    if (file) formData.append('image', file);
+    if (file) {
+      const uploadName = file.name || `photo_${Date.now()}.jpg`;
+      formData.append('image', file, uploadName);
+      console.log('[upload] send', {
+        name: uploadName,
+        type: file.type,
+        size: file.size,
+      });
+    }
 
     const res = await fetch('/chat/stream', {
       method: 'POST',
@@ -462,7 +652,19 @@ async function sendMessage() {
 
     if (!res.ok || !res.body) {
       const msg = await res.text();
-      throw new Error(msg || `HTTP ${res.status}`);
+      let errText = msg || `HTTP ${res.status}`;
+      try {
+        const j = JSON.parse(msg);
+        if (j.error) errText = j.error;
+        if (j.uploadId) {
+          errText += ` [日志ID: ${j.uploadId}]`;
+          console.error('[upload] failed uploadId=', j.uploadId, j.hint || '');
+        }
+        if (j.debug) console.error('[upload-debug]', j.debug);
+      } catch {
+        /* plain text */
+      }
+      throw new Error(errText);
     }
 
     const reader = res.body.getReader();
@@ -475,7 +677,7 @@ async function sendMessage() {
     // 等待效果（AI智能助手 正在回复...）
     const typing = document.createElement('div');
     typing.className = 'typing';
-    typing.innerHTML = `${ASSISTANT_NAME} 正在回复 <span class="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span>`;
+    typing.innerHTML = `${ASSISTANT_NAME}正在思考<span class="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span>`;
     aiNode.contentEl.appendChild(typing);
 
     while (true) {
@@ -609,6 +811,131 @@ async function loadLinks() {
     linkList.textContent = '链接配置加载失败';
   }
 }
+
+// ===== 移动端语音输入（按住说话）=====
+function initVoiceInput() {
+  if (!voiceInputBtn) return;
+
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    voiceInputBtn.title = '当前浏览器不支持语音输入';
+    return;
+  }
+
+  if (!window.isSecureContext) {
+    const httpsPort = window.location.port === '3001' ? '3000' : window.location.port || '3000';
+    voiceInputBtn.title = `语音需 HTTPS，请访问 https://电脑IP:${httpsPort}`;
+  }
+
+  let recognition = null;
+  let pressActive = false;
+  let voiceBaseText = '';
+
+  function ensureRecognition() {
+    if (recognition) return recognition;
+    recognition = new SpeechRecognition();
+    recognition.lang = 'zh-CN';
+    recognition.continuous = true;
+    recognition.interimResults = true;
+
+    recognition.onresult = (event) => {
+      let transcript = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        transcript += event.results[i][0].transcript;
+      }
+      userInput.value = voiceBaseText + transcript;
+    };
+
+    recognition.onend = () => {
+      if (pressActive) {
+        try {
+          recognition.start();
+        } catch {
+          /* 等待用户松手 */
+        }
+        return;
+      }
+      voiceInputBtn.classList.remove('recording');
+      voiceInputBtn.setAttribute('aria-pressed', 'false');
+    };
+
+    recognition.onerror = (event) => {
+      if (event.error === 'aborted') return;
+      pressActive = false;
+      voiceInputBtn.classList.remove('recording');
+      voiceInputBtn.setAttribute('aria-pressed', 'false');
+      if (event.error === 'not-allowed') {
+        alert('无法使用语音输入，请在浏览器中允许麦克风权限');
+      } else if (event.error === 'service-not-allowed') {
+        alert('语音输入需要 HTTPS。\n请访问：https://你的电脑IP:3000');
+      } else {
+        console.warn('[voice]', event.error);
+      }
+    };
+    return recognition;
+  }
+
+  function startListen(e) {
+    e.preventDefault();
+    if (pressActive) return;
+
+    if (!window.isSecureContext) {
+      alert(
+        '语音输入需要 HTTPS。\n' +
+          '请用手机访问 https://你的电脑IP:3000（与电脑同一 Wi-Fi），首次打开需信任证书并允许麦克风。'
+      );
+      return;
+    }
+
+    pressActive = true;
+    voiceBaseText = userInput.value;
+    if (voiceBaseText && !/[\s\n]$/.test(voiceBaseText)) voiceBaseText += ' ';
+
+    const rec = ensureRecognition();
+    try {
+      rec.abort();
+    } catch {
+      /* ignore */
+    }
+    try {
+      rec.start();
+      voiceInputBtn.classList.add('recording');
+      voiceInputBtn.setAttribute('aria-pressed', 'true');
+    } catch (err) {
+      pressActive = false;
+      console.warn('[voice] start failed', err);
+    }
+  }
+
+  function stopListen(e) {
+    e.preventDefault();
+    if (!pressActive) return;
+    pressActive = false;
+    try {
+      recognition?.stop();
+    } catch {
+      /* ignore */
+    }
+    voiceInputBtn.classList.remove('recording');
+    voiceInputBtn.setAttribute('aria-pressed', 'false');
+  }
+
+  voiceInputBtn.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    voiceInputBtn.setPointerCapture(e.pointerId);
+    startListen(e);
+  });
+  voiceInputBtn.addEventListener('pointerup', (e) => {
+    if (voiceInputBtn.hasPointerCapture(e.pointerId)) {
+      voiceInputBtn.releasePointerCapture(e.pointerId);
+    }
+    stopListen(e);
+  });
+  voiceInputBtn.addEventListener('pointercancel', stopListen);
+  voiceInputBtn.addEventListener('contextmenu', (e) => e.preventDefault());
+}
+
+initVoiceInput();
 
 // 初始化（等待会话列表/自动新建完成后再交互，避免未选中会话就发送）
 loadLinks();
