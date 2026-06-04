@@ -71,7 +71,24 @@ IMGBB_API_KEY=
 npm start
 ```
 
-浏览器访问 `http://localhost:3000`
+本机开发默认双端口：
+
+| 用途 | 地址 |
+| --- | --- |
+| 电脑浏览器 | `http://localhost:3001`（自动跳转到 HTTPS） |
+| **手机（同 Wi‑Fi）** | **`https://<电脑局域网IP>:3000`** |
+
+手机不要用 `http://` 访问 3000，也不要用 `https://` 访问 3001（会提示「使用不受支持的协议」）。自签证书首次需在浏览器点「继续访问」。
+
+**手机报 `ERR_SSL_VERSION_OR_CIPHER_MISMATCH` 时：**
+
+| 场景 | 地址 |
+| --- | --- |
+| 语音 + 聊天（推荐） | `https://<电脑局域网IP>:3000`（启动后控制台会打印具体 IP） |
+| 仅文字聊天（无语音） | `http://<电脑局域网IP>:3001`（页面 GET 会跳 HTTPS；API 仍可用） |
+| 浏览器信任的 HTTPS | 启动 cloudflared 隧道（`.env` 设 `ENABLE_CLOUDFLARED=1`），用手机打开控制台输出的 `*.trycloudflare.com` URL |
+
+自签 HTTPS 使用 RSA-2048 + SHA-256 证书与 TLS 1.2–1.3；若个别旧机型仍握手失败，请改用 cloudflared 隧道。
 
 ---
 
@@ -87,6 +104,7 @@ npm start
 5. **切换会话**：点击左侧列表，历史记录完整恢复
 6. **第三方链接**：右侧栏展示配置的链接，点击跳转
 7. **主题切换**：点击右上角 🌙/☀️ 按钮切换暗/亮色主题
+8. **语音输入（🎤）**：默认使用**阿里云一句话识别**（服务端 STT，大陆可用）。在 `.env` 配置 `ALIYUN_ACCESS_KEY_ID`、`ALIYUN_ACCESS_KEY_SECRET` 与 `ALIYUN_NLS_APP_KEY`（见 `.env.example`）。iPhone Safari 仍可走浏览器 Web Speech 快速路径；安卓 Chrome / 网页语音无响应时会自动改用服务端识别。详见 [VOICE_TEST.md](./VOICE_TEST.md)。
 
 ---
 
@@ -247,6 +265,12 @@ ENABLE_HTTPS=0
 # 生产关闭调试与临时隧道
 DEBUG_UPLOAD=0
 ENABLE_LOCALTUNNEL=0
+
+# Aliyun STT
+ALIYUN_ACCESS_KEY_ID=
+ALIYUN_ACCESS_KEY_SECRET=
+ALIYUN_NLS_APP_KEY=
+# ALIYUN_NLS_REGION=cn-shanghai
 
 # 可选：imgbb 图床，提升图片识别成功率
 # IMGBB_API_KEY=

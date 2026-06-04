@@ -79,6 +79,22 @@ async function run() {
     detail: `HTTP ${r7.status}`,
   });
 
+  // ⑧ GET /voice-test.html 语音检测页可访问
+  const r8 = await req('GET', '/voice-test.html');
+  results.push({
+    name: 'GET /voice-test.html 语音检测页可访问',
+    pass: r8.status === 200 && r8.body.includes('SpeechRecognition'),
+    detail: `HTTP ${r8.status}`,
+  });
+
+  // ⑨ POST /api/speech-to-text 无音频 → 400/503
+  const r9 = await req('POST', '/api/speech-to-text');
+  results.push({
+    name: 'POST /api/speech-to-text 无音频 → 4xx',
+    pass: r9.status === 400 || r9.status === 503,
+    detail: `HTTP ${r9.status}`,
+  });
+
   let passed = 0;
   console.log('\n=== AIChater 冒烟测试 ===\n');
   for (const t of results) {

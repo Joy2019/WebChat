@@ -13,6 +13,9 @@
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
+    <div id="protocol-hint" class="protocol-hint" role="alert" hidden>
+      手机请使用 <strong>https://电脑IP:3000</strong>（不要用 http 访问 3000，也不要用 https 访问 3001）。自签证书需在浏览器点「继续访问」。
+    </div>
     <div class="app">
       <header class="top-title-bar">
         <img
@@ -67,6 +70,10 @@
                 <button id="paste-clear" class="paste-clear" title="移除图片">✕</button>
               </div>
 
+              <p id="voice-status" class="voice-status" hidden aria-live="polite"></p>
+              <div id="voice-toast" class="voice-toast" role="status" hidden></div>
+              <pre id="voice-debug" class="voice-debug" hidden></pre>
+
               <div class="input-row">
                 <textarea
                   id="user-input"
@@ -78,9 +85,17 @@
                     type="button"
                     id="voice-input-btn"
                     class="voice-input-btn"
-                    title="按住说话"
-                    aria-label="按住说话"
+                    title="语音输入"
+                    aria-label="语音输入"
                   >🎤</button>
+                  <button
+                    type="button"
+                    id="voice-output-btn"
+                    class="voice-output-btn"
+                    title="朗读回复（关）"
+                    aria-label="朗读回复"
+                    aria-pressed="false"
+                  >🔇</button>
                   <button type="button" id="upload-btn" class="upload-trigger" title="添加图片">
                     <span class="upload-icon">+</span>
                   </button>
@@ -113,6 +128,16 @@
     </div>
 
     <script src="app.js"></script>
+    <script>
+      (function () {
+        var el = document.getElementById('protocol-hint');
+        if (!el) return;
+        var mobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+        if (mobile && location.protocol !== 'https:') {
+          el.hidden = false;
+        }
+      })();
+    </script>
   </body>
 </html>
 

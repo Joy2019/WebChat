@@ -13,6 +13,13 @@ import { Blob } from 'node:buffer';
 import { spawn } from 'child_process';
 import axios from 'axios';
 import { createUploadTrace, readUploadLogTail } from './lib/upload-trace.js';
+import {
+  detectAliyunAudioFormat,
+  formatAliyunSttError,
+  isAliyunSttConfigured,
+  transcribeWithAliyun,
+  validateAliyunSttConfig,
+} from './lib/aliyun-stt.js';
 
 dotenv.config();
 
@@ -286,6 +293,20 @@ function resolveImageMime(file, sniff) {
   return map[ext] || 'image/jpeg';
 }
 
+const speechUpload = multer({
+  dest: 'uploads/',
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const mime = (file.mimetype || '').toLowerCase();
+    const ext = path.extname(file.originalname || '').toLowerCase();
+    const ok =
+      mime.startsWith('audio/') ||
+      ['.wav', '.webm', '.mp3', '.mpeg', '.amr', '.m4a', '.ogg'].includes(ext);
+    if (ok) cb(null, true);
+    else cb(new Error('仅支持音频（wav/webm/mp3 等）'));
+  },
+});
+
 const upload = multer({
   dest: 'uploads/',
   limits: { fileSize: 20 * 1024 * 1024 },
@@ -338,6 +359,12 @@ if (!BOT_ID) {
 }
 if (!process.env.COZE_API_TOKEN) {
   console.warn('[WARN] COZE_API_TOKEN is empty. Please set it in .env');
+}
+if (!isAliyunSttConfigured()) {
+  console.warn('[WARN] ALIYUN_ACCESS_KEY_ID / ALIYUN_ACCESS_KEY_SECRET / ALIYUN_NLS_APP_KEY 未配置，语音输入将返回 503');
+} else {
+  const sttConfigWarn = validateAliyunSttConfig();
+  if (sttConfigWarn) console.warn(`[WARN] ${sttConfigWarn}`);
 }
 
 app.use(express.static('public'));
@@ -517,9 +544,69 @@ app.get('/api/health', (_req, res) => {
     cozeToken: !!process.env.COZE_API_TOKEN,
     cozeBot: !!BOT_ID,
     imgbb: !!process.env.IMGBB_API_KEY,
+    aliyunStt: isAliyunSttConfigured(),
     https: process.env.ENABLE_HTTPS !== '0',
     tunnel: process.env.ENABLE_LOCALTUNNEL === '1',
   });
+});
+
+app.post('/api/speech-to-text', (req, res, next) => {
+  speechUpload.single('audio')(req, res, (err) => {
+    if (err) {
+      res.status(400).json({ error: err.message || '音频上传失败' });
+      return;
+    }
+    next();
+  });
+}, async (req, res) => {
+  const traceLog = DEBUG_UPLOAD
+    ? (step, data) => console.log(`[STT] ${step}`, data || '')
+    : () => {};
+
+  let filePath = null;
+  try {
+    if (!isAliyunSttConfigured()) {
+      res.status(503).json({
+        error: '请配置 ALIYUN_ACCESS_KEY_ID、ALIYUN_ACCESS_KEY_SECRET 与 ALIYUN_NLS_APP_KEY',
+      });
+      return;
+    }
+
+    const file = req.file;
+    if (!file) {
+      res.status(400).json({ error: '缺少音频字段 audio' });
+      return;
+    }
+    filePath = file.path;
+
+    const audioBuffer = await fs.promises.readFile(file.path);
+    if (audioBuffer.length < 100) {
+      res.status(400).json({ error: '音频过短，请说 1–2 秒后再试' });
+      return;
+    }
+    if (audioBuffer.length > 10 * 1024 * 1024) {
+      res.status(400).json({ error: '音频过大（最大 10MB）' });
+      return;
+    }
+
+    const rawFormat = detectAliyunAudioFormat(file.mimetype, file.originalname);
+    if (rawFormat === 'webm') {
+      res.status(400).json({
+        error: '请上传 wav 格式（客户端会在发送前自动转换 webm）',
+      });
+      return;
+    }
+
+    const text = await transcribeWithAliyun(audioBuffer, rawFormat, { traceLog });
+    res.json({ text: text || '' });
+  } catch (e) {
+    const userError = formatAliyunSttError(e);
+    console.error('[STT]', e?.message || e);
+    traceLog('aliyun_error', { error: e?.message, userError });
+    res.status(500).json({ error: userError });
+  } finally {
+    if (filePath) fs.unlink(filePath, () => {});
+  }
 });
 
 // 纯文本+可选图片，流式响应
@@ -793,6 +880,57 @@ function printAccessUrls(scheme, port) {
   }
 }
 
+/** 浏览器误用 http/https 与端口错配时会出现「使用不受支持的协议」 */
+function printMobileAccessGuide(httpsPort, httpPort, httpsEnabled) {
+  const lan = getLanAddresses();
+  console.log('');
+  console.log('╔══════════════════════════════════════════════════════════════╗');
+  console.log('║  手机访问（同一 Wi‑Fi，语音输入必须用 HTTPS）                    ║');
+  console.log('╚══════════════════════════════════════════════════════════════╝');
+  if (!httpsEnabled) {
+    console.log('  [WARN] ENABLE_HTTPS=0，未启动 HTTPS。手机语音需 Nginx/隧道 提供 HTTPS。');
+    return;
+  }
+  console.log(`  ✓ 请用：https://<电脑局域网IP>:${httpsPort}`);
+  console.log(`  ✗ 不要用 http:// 访问 ${httpsPort} 端口（该端口只提供 HTTPS）`);
+  console.log(`  ✗ 不要用 https:// 访问 ${httpPort} 端口（该端口只提供 HTTP，会报协议错误）`);
+  console.log(`  · 若误开 http://IP:${httpPort}，浏览器会自动跳转到 HTTPS ${httpsPort}`);
+  console.log('  · 自签证书：首次打开需在 Safari/Chrome 点「继续访问」或「高级→继续」');
+  console.log('    （那是证书警告，与 ERR_SSL_VERSION_OR_CIPHER_MISMATCH 不同）');
+  if (lan.length) {
+    console.log('  本机可用地址示例：');
+    for (const ip of lan) {
+      console.log(`       https://${ip}:${httpsPort}`);
+    }
+  } else {
+    console.log(`       https://<你的电脑IP>:${httpsPort}`);
+  }
+  console.log('');
+  console.log('  若手机仍报 SSL 版本/密码套件错误（ERR_SSL_VERSION_OR_CIPHER_MISMATCH）：');
+  console.log(`    · 文字聊天（无语音）：http://<电脑IP>:${httpPort}（仅 API，页面 GET 会跳 HTTPS）`);
+  console.log('    · 语音 + 浏览器信任证书：启动 cloudflared 隧道（见上方 Cloudflare 临时证书 URL）');
+  console.log('      或 .env 设置 ENABLE_CLOUDFLARED=1 后重启');
+  console.log('');
+}
+
+/** HTTP 端口：将浏览器页面导航重定向到 HTTPS，API 仍走 HTTP 可用 */
+function buildHttpToHttpsRedirect(httpsPort) {
+  return (req, res, next) => {
+    if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+    if (req.path.startsWith('/api/')) return next();
+    const accept = (req.headers.accept || '').toLowerCase();
+    const isPageNav =
+      req.path === '/' ||
+      req.path === '/index.html' ||
+      accept.includes('text/html');
+    if (!isPageNav) return next();
+    const hostHeader = req.headers.host || '';
+    const hostname = hostHeader.split(':')[0] || req.hostname || 'localhost';
+    const loc = `https://${hostname}:${httpsPort}${req.originalUrl}`;
+    return res.redirect(302, loc);
+  };
+}
+
 function printTunnelBanner(label, url) {
   console.log('');
   console.log('========== 免费公网 HTTPS（浏览器信任，可测语音）==========');
@@ -866,9 +1004,18 @@ async function startPublicHttpsTunnel(port) {
   if (!ok) startCloudflaredTunnel(port);
 }
 
-app.listen(HTTP_PORT, HOST, () => {
-  console.log(`HTTP  listening on ${HOST}:${HTTP_PORT}`);
+const ENABLE_HTTPS = process.env.ENABLE_HTTPS !== '0';
+
+const httpApp = express();
+if (ENABLE_HTTPS) {
+  httpApp.use(buildHttpToHttpsRedirect(HTTPS_PORT));
+}
+httpApp.use(app);
+
+httpApp.listen(HTTP_PORT, HOST, () => {
+  console.log(`HTTP  listening on ${HOST}:${HTTP_PORT}（页面 GET 将跳转到 HTTPS ${HTTPS_PORT}）`);
   printAccessUrls('http', HTTP_PORT);
+  printMobileAccessGuide(HTTPS_PORT, HTTP_PORT, ENABLE_HTTPS);
   if (process.env.DEBUG_UPLOAD === undefined) {
     console.log('[TIP] 图片上传排错：在 .env 设置 DEBUG_UPLOAD=1，失败时响应含 uploadId 与 debug');
   }
@@ -878,23 +1025,58 @@ app.listen(HTTP_PORT, HOST, () => {
   startPublicHttpsTunnel(HTTP_PORT);
 });
 
-const ENABLE_HTTPS = process.env.ENABLE_HTTPS !== '0';
+/** TLS 1.2+ 与移动端广泛支持的 RSA 密码套件（避免 ECDSA/SHA-1 自签导致握手失败） */
+const MOBILE_TLS_CIPHERS = 'HIGH:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5:!PSK:!SRP:!CAMELLIA';
 
-if (ENABLE_HTTPS) {
-  const altNames = [{ type: 2, value: 'localhost' }];
+async function createSelfSignedCredentials() {
+  const altNames = [
+    { type: 2, value: 'localhost' },
+    { type: 7, ip: '127.0.0.1' },
+  ];
   for (const ip of getLanAddresses()) {
     altNames.push({ type: 7, ip });
   }
-  const pems = selfsigned.generate([{ name: 'commonName', value: 'AIChater' }], {
-    days: 365,
+  const notAfterDate = new Date();
+  notAfterDate.setFullYear(notAfterDate.getFullYear() + 1);
+  return selfsigned.generate([{ name: 'commonName', value: 'AIChater' }], {
+    keyType: 'rsa',
     keySize: 2048,
-    extensions: [{ name: 'subjectAltName', altNames }],
+    algorithm: 'sha256',
+    notAfterDate,
+    extensions: [
+      { name: 'basicConstraints', cA: false, critical: true },
+      { name: 'keyUsage', digitalSignature: true, keyEncipherment: true, critical: true },
+      { name: 'extKeyUsage', serverAuth: true },
+      { name: 'subjectAltName', altNames },
+    ],
   });
+}
+
+async function startHttpsServer() {
+  const pems = await createSelfSignedCredentials();
   https
-    .createServer({ key: pems.private, cert: pems.cert }, app)
+    .createServer(
+      {
+        key: pems.private,
+        cert: pems.cert,
+        minVersion: 'TLSv1.2',
+        maxVersion: 'TLSv1.3',
+        ciphers: MOBILE_TLS_CIPHERS,
+        honorCipherOrder: true,
+      },
+      app
+    )
     .listen(HTTPS_PORT, HOST, () => {
       console.log(`HTTPS listening on ${HOST}:${HTTPS_PORT}（手机语音+聊天请用此地址）`);
+      console.log('  TLS: RSA-2048 / SHA-256 自签证书，TLS 1.2–1.3');
       printAccessUrls('https', HTTPS_PORT);
     });
+}
+
+if (ENABLE_HTTPS) {
+  startHttpsServer().catch((err) => {
+    console.error('[HTTPS] 启动失败:', err.message || err);
+    process.exit(1);
+  });
 }
 
