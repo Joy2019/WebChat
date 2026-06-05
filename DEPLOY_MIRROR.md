@@ -4,7 +4,7 @@ GitHub 在中国大陆访问不稳定，生产服务器（如 `10.63.7.241`）�
 
 > **主仓库（GitHub）**：`https://github.com/Joy2019/WebChat.git`  
 > **开发分支**：`H5Branch`  
-> **推荐镜像（Gitee）**：`https://gitee.com/<你的用户名>/AIChater.git`
+> **推荐镜像（Gitee）**：`https://gitee.com/yrhbsw/AIChater.git`
 
 ---
 
@@ -19,7 +19,7 @@ GitHub 在中国大陆访问不稳定，生产服务器（如 `10.63.7.241`）�
    - **初始化仓库**：**不要**勾选「使用 Readme 文件初始化」（保持空仓库，避免首次 push 冲突）
 4. 点击 **创建**，记下仓库 HTTPS 地址，形如：
    ```
-   https://gitee.com/你的用户名/AIChater.git
+   https://gitee.com/yrhbsw/AIChater.git
    ```
 
 ---
@@ -31,7 +31,7 @@ GitHub 在中国大陆访问不稳定，生产服务器（如 `10.63.7.241`）�
 ### 2.1 添加第二个 remote（保留 GitHub 的 `origin`）
 
 ```bash
-git remote add gitee https://gitee.com/你的用户名/AIChater.git
+git remote add gitee https://gitee.com/yrhbsw/AIChater.git
 ```
 
 验证：
@@ -39,13 +39,13 @@ git remote add gitee https://gitee.com/你的用户名/AIChater.git
 ```bash
 git remote -v
 # origin  https://github.com/Joy2019/WebChat.git (fetch/push)
-# gitee   https://gitee.com/你的用户名/AIChater.git (fetch/push)
+# gitee   https://gitee.com/yrhbsw/AIChater.git (fetch/push)
 ```
 
 若已存在 `gitee` 远程，可改用：
 
 ```bash
-git remote set-url gitee https://gitee.com/你的用户名/AIChater.git
+git remote set-url gitee https://gitee.com/yrhbsw/AIChater.git
 ```
 
 ### 2.2 推送分支到 Gitee
@@ -96,7 +96,7 @@ git push gitee H5Branch
 sudo mkdir -p /var/www
 sudo chown $USER:$USER /var/www
 
-git clone https://gitee.com/你的用户名/AIChater.git /var/www/AIChater
+git clone https://gitee.com/yrhbsw/AIChater.git /var/www/AIChater
 cd /var/www/AIChater
 git checkout H5Branch
 
@@ -113,7 +113,7 @@ nano .env
 ```bash
 cd /var/www/AIChater
 
-git remote add gitee https://gitee.com/你的用户名/AIChater.git
+git remote add gitee https://gitee.com/yrhbsw/AIChater.git
 git fetch gitee
 git checkout H5Branch
 git branch --set-upstream-to=gitee/H5Branch H5Branch
@@ -132,7 +132,7 @@ pm2 restart aichater
 
 ```bash
 cd /var/www/AIChater
-git remote set-url origin https://gitee.com/你的用户名/AIChater.git
+git remote set-url origin https://gitee.com/yrhbsw/AIChater.git
 git pull origin H5Branch
 ```
 
@@ -141,7 +141,7 @@ git pull origin H5Branch
 服务器需配置凭据之一：
 
 - **HTTPS + 私人令牌**：`git config credential.helper store` 后首次 `git pull` 输入用户名与令牌；
-- **SSH**：在 Gitee 添加服务器公钥，remote 改为 `git@gitee.com:你的用户名/AIChater.git`。
+- **SSH**：在 Gitee 添加服务器公钥，remote 改为 `git@gitee.com:yrhbsw/AIChater.git`。
 
 ---
 
@@ -187,7 +187,7 @@ sudo nginx -t && sudo systemctl reload nginx
 
 ```bash
 # 本地 — 一次性配置
-git remote add gitee https://gitee.com/你的用户名/AIChater.git
+git remote add gitee https://gitee.com/yrhbsw/AIChater.git
 git push -u gitee H5Branch
 git push gitee main
 
@@ -195,6 +195,6 @@ git push gitee main
 git push origin H5Branch && git push gitee H5Branch
 
 # 服务器 — 添加镜像源并拉取
-git remote add gitee https://gitee.com/你的用户名/AIChater.git
+git remote add gitee https://gitee.com/yrhbsw/AIChater.git
 git pull gitee H5Branch
 ```
