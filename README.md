@@ -15,6 +15,10 @@ AIChater/
 │   └── links.json      # 右侧第三方链接配置（可控制显隐）
 ├── server.js           # Express 后端（Coze 流式代理、会话 API、图片公开上传）
 ├── test.mjs            # 冒烟测试（7 个 API 用例）
+├── scripts/
+│   ├── mirror-push.ps1 # Windows：双端 push（origin + gitee）
+│   └── mirror-push.sh  # Linux/macOS：双端 push
+├── DEPLOY_MIRROR.md    # 国内 Gitee 镜像部署完整指南
 ├── package.json
 ├── .env                # 敏感配置（不提交到版本控制）
 └── .env.example        # 配置示例
@@ -240,8 +244,13 @@ nginx -v
 sudo mkdir -p /var/www
 sudo chown $USER:$USER /var/www
 
+# 海外 / 可访问 GitHub 时
 git clone https://github.com/Joy2019/WebChat.git /var/www/AIChater
 cd /var/www/AIChater
+git checkout H5Branch
+
+# 中国大陆服务器请改用 Gitee 镜像，见下文「国内镜像部署」
+# git clone https://gitee.com/你的用户名/AIChater.git /var/www/AIChater
 
 npm install --omit=dev
 
@@ -290,6 +299,39 @@ ALIYUN_NLS_APP_KEY=
 ```bash
 mkdir -p uploads logs
 ```
+
+---
+
+### 2.1 国内镜像部署（Gitee 码云）
+
+GitHub 在大陆访问不稳定时，将代码镜像到 **Gitee**，服务器从国内源拉取。完整步骤见 **[DEPLOY_MIRROR.md](./DEPLOY_MIRROR.md)**。
+
+**本地（一次性）**
+
+1. 在 [gitee.com](https://gitee.com) 新建空仓库 `AIChater`（勿勾选初始化 README）。
+2. 添加远程并推送：
+
+```bash
+git remote add gitee https://gitee.com/你的用户名/AIChater.git
+git push -u gitee H5Branch
+git push gitee main    # 可选
+```
+
+**日常双端推送**：`git push origin H5Branch && git push gitee H5Branch`，或运行 `.\scripts\mirror-push.ps1` / `./scripts/mirror-push.sh`。
+
+**服务器 `10.63.7.241`（首次或已有 clone）**
+
+```bash
+cd /var/www/AIChater
+git remote add gitee https://gitee.com/你的用户名/AIChater.git   # 若尚未添加
+git fetch gitee
+git checkout H5Branch
+git pull gitee H5Branch
+```
+
+或将 `origin` 直接改为 Gitee：`git remote set-url origin https://gitee.com/你的用户名/AIChater.git`。
+
+**备选平台**（用法相同，仅换仓库 URL）：GitCode、AtomGit、阿里云 Codeup。详见 [DEPLOY_MIRROR.md](./DEPLOY_MIRROR.md)。
 
 ---
 
@@ -534,9 +576,21 @@ tail -f /var/www/AIChater/logs/upload-$(date +%F).log
 
 ### 9. 更新发布流程
 
+**从 GitHub（origin）**
+
 ```bash
 cd /var/www/AIChater
-git pull
+git pull origin H5Branch
+npm install --omit=dev
+pm2 restart aichater
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+**从 Gitee 镜像（国内服务器推荐）**
+
+```bash
+cd /var/www/AIChater
+git pull gitee H5Branch
 npm install --omit=dev
 pm2 restart aichater
 sudo nginx -t && sudo systemctl reload nginx
@@ -563,6 +617,7 @@ sudo nginx -t && sudo systemctl reload nginx
 ## 注意事项
 
 - `.env` 文件含敏感 Token，**不要提交到 Git**
+- 生产服务器若无法访问 GitHub，请按 [DEPLOY_MIRROR.md](./DEPLOY_MIRROR.md) 配置 Gitee 镜像后再 `git pull`
 - 会话数据存在内存中，服务重启后丢失；生产环境建议接入数据库
 - Coze PAT 有效期最长 90 天，到期需重新生成并更新 `.env`
 - 图片上传至公开图床（imgbb / sm.ms），请勿上传含敏感信息的图片；如有需求可在 `.env` 中不配置 `IMGBB_API_KEY` 并修改 `server.js` 改用私有图床
