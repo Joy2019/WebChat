@@ -147,7 +147,64 @@ git pull origin H5Branch
 
 ## 四、与 README 部署流程的关系
 
-镜像只解决 **代码拉取**；`.env`、PM2、Nginx、HTTPS 等仍按 [README.md](./README.md) 中「使用 Nginx 部署」章节操作。更新发布典型命令：
+镜像只解决 **代码拉取**；`.env`、PM2、Nginx、HTTPS 等仍按 [README.md](./README.md) 中「使用 Nginx 部署」章节操作。
+
+### 生产域名访问（示例：aigckzsy.sebri.cn）
+
+| 项目 | 配置 |
+| --- | --- |
+| **用户访问** | `https://aigckzsy.sebri.cn`（标准 443，**不要** `:3000`） |
+| **Node 监听** | `127.0.0.1:3001`（纯 HTTP） |
+| **Nginx** | 443 SSL 终止 → `proxy_pass http://127.0.0.1:3001` |
+
+**服务器 `.env` 关键项**（路径示例 `/home/ubuntu2022/AIChater` 或 `/var/www/AIChater`）：
+
+```bash
+HOST=127.0.0.1
+HTTP_PORT=3001
+PORT=3001
+ENABLE_HTTPS=0
+BEHIND_NGINX=1
+PUBLIC_URL=https://aigckzsy.sebri.cn
+DEBUG_UPLOAD=0
+ENABLE_LOCALTUNNEL=0
+```
+
+**Nginx 片段**（`/etc/nginx/sites-available/aichater`）：
+
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name aigckzsy.sebri.cn;
+
+    ssl_certificate     /path/to/fullchain.pem;
+    ssl_certificate_key /path/to/privkey.pem;
+
+    client_max_body_size 20m;
+
+    location / {
+        proxy_pass http://127.0.0.1:3001;
+        proxy_buffering off;
+        proxy_request_buffering off;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 300s;
+    }
+}
+
+server {
+    listen 80;
+    server_name aigckzsy.sebri.cn;
+    return 301 https://$host$request_uri;
+}
+```
+
+> **为何会出现 `:3000` 与 SSL 错误？**  
+> 开发模式下 Node 会把 HTTP 页面重定向到 `https://<Host>:3000`。生产若未设 `BEHIND_NGINX=1`，经 Nginx 反代后浏览器仍被重定向到 `:3000`；若再用 HTTPS 访问 3000（该端口可能是 HTTP 或自签证书），就会报 `ERR_SSL_PROTOCOL_ERROR`。
+
+更新发布典型命令：
 
 ```bash
 cd /var/www/AIChater

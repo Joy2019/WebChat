@@ -545,7 +545,9 @@ app.get('/api/health', (_req, res) => {
     cozeBot: !!BOT_ID,
     imgbb: !!process.env.IMGBB_API_KEY,
     aliyunStt: isAliyunSttConfigured(),
-    https: process.env.ENABLE_HTTPS !== '0',
+    https: !BEHIND_NGINX && process.env.ENABLE_HTTPS !== '0',
+    behindNginx: BEHIND_NGINX,
+    publicUrl: PUBLIC_URL || null,
     tunnel: process.env.ENABLE_LOCALTUNNEL === '1',
   });
 });
@@ -848,13 +850,21 @@ app.use((err, req, res, next) => {
   res.status(400).json({ error: err.message || 'request failed' });
 });
 
+const BEHIND_NGINX = process.env.BEHIND_NGINX === '1' || process.env.BEHIND_NGINX === 'true';
+const DISABLE_HTTP_TO_HTTPS_REDIRECT =
+  BEHIND_NGINX ||
+  process.env.DISABLE_HTTP_TO_HTTPS_REDIRECT === '1' ||
+  process.env.DISABLE_HTTP_TO_HTTPS_REDIRECT === 'true';
+const PUBLIC_URL = (process.env.PUBLIC_URL || '').replace(/\/$/, '');
+const PUBLIC_HTTPS_PORT = Number(process.env.PUBLIC_HTTPS_PORT || 443);
+
 const HTTPS_PORT = Number(process.env.HTTPS_PORT || 3000);
 let HTTP_PORT = Number(process.env.HTTP_PORT || process.env.PORT || 3001);
 // 避免与 HTTPS 同端口（.env 里 PORT=3000 时自动挪到 3001）
 if (HTTP_PORT === HTTPS_PORT) {
   HTTP_PORT = HTTPS_PORT === 3000 ? 3001 : HTTPS_PORT + 1;
 }
-const HOST = process.env.HOST || '0.0.0.0';
+const HOST = process.env.HOST || (BEHIND_NGINX ? '127.0.0.1' : '0.0.0.0');
 
 function getLanAddresses() {
   const nets = os.networkInterfaces();
@@ -881,12 +891,24 @@ function printAccessUrls(scheme, port) {
 }
 
 /** 浏览器误用 http/https 与端口错配时会出现「使用不受支持的协议」 */
-function printMobileAccessGuide(httpsPort, httpPort, httpsEnabled) {
+function printMobileAccessGuide(httpsPort, httpPort, httpsEnabled, options = {}) {
+  const { behindNginx, publicUrl } = options;
   const lan = getLanAddresses();
   console.log('');
   console.log('╔══════════════════════════════════════════════════════════════╗');
   console.log('║  手机访问（同一 Wi‑Fi，语音输入必须用 HTTPS）                    ║');
   console.log('╚══════════════════════════════════════════════════════════════╝');
+  if (behindNginx) {
+    console.log('  [生产] BEHIND_NGINX=1：Node 仅 HTTP，HTTPS 由 Nginx 443 提供。');
+    if (publicUrl) {
+      console.log(`  ✓ 用户访问：${publicUrl}（不要加 :3000）`);
+    } else {
+      console.log('  ✓ 请在 .env 设置 PUBLIC_URL=https://你的域名（标准 443，无端口）');
+    }
+    console.log(`  · Nginx proxy_pass → http://127.0.0.1:${httpPort}`);
+    console.log('');
+    return;
+  }
   if (!httpsEnabled) {
     console.log('  [WARN] ENABLE_HTTPS=0，未启动 HTTPS。手机语音需 Nginx/隧道 提供 HTTPS。');
     return;
@@ -914,19 +936,32 @@ function printMobileAccessGuide(httpsPort, httpPort, httpsEnabled) {
 }
 
 /** HTTP 端口：将浏览器页面导航重定向到 HTTPS，API 仍走 HTTP 可用 */
-function buildHttpToHttpsRedirect(httpsPort) {
+function buildHttpToHttpsRedirect(httpsPort, options = {}) {
+  const { publicUrl, publicHttpsPort = 443 } = options;
   return (req, res, next) => {
     if (req.method !== 'GET' && req.method !== 'HEAD') return next();
     if (req.path.startsWith('/api/')) return next();
+    const forwardedProto = (req.headers['x-forwarded-proto'] || '').split(',')[0].trim().toLowerCase();
+    if (forwardedProto === 'https') return next();
     const accept = (req.headers.accept || '').toLowerCase();
     const isPageNav =
       req.path === '/' ||
       req.path === '/index.html' ||
       accept.includes('text/html');
     if (!isPageNav) return next();
-    const hostHeader = req.headers.host || '';
-    const hostname = hostHeader.split(':')[0] || req.hostname || 'localhost';
-    const loc = `https://${hostname}:${httpsPort}${req.originalUrl}`;
+
+    let loc;
+    if (publicUrl) {
+      loc = `${publicUrl}${req.originalUrl}`;
+    } else {
+      const hostHeader = req.headers.host || '';
+      const hostname = hostHeader.split(':')[0] || req.hostname || 'localhost';
+      const hostHasExplicitPort = hostHeader.includes(':');
+      const useStandardPort = publicHttpsPort === 443;
+      const portSuffix =
+        useStandardPort && !hostHasExplicitPort ? '' : `:${httpsPort}`;
+      loc = `https://${hostname}${portSuffix}${req.originalUrl}`;
+    }
     return res.redirect(302, loc);
   };
 }
@@ -1004,18 +1039,32 @@ async function startPublicHttpsTunnel(port) {
   if (!ok) startCloudflaredTunnel(port);
 }
 
-const ENABLE_HTTPS = process.env.ENABLE_HTTPS !== '0';
+const ENABLE_HTTPS = !BEHIND_NGINX && process.env.ENABLE_HTTPS !== '0';
 
 const httpApp = express();
-if (ENABLE_HTTPS) {
-  httpApp.use(buildHttpToHttpsRedirect(HTTPS_PORT));
+if (ENABLE_HTTPS && !DISABLE_HTTP_TO_HTTPS_REDIRECT) {
+  httpApp.use(buildHttpToHttpsRedirect(HTTPS_PORT, {
+    publicUrl: PUBLIC_URL,
+    publicHttpsPort: PUBLIC_HTTPS_PORT,
+  }));
 }
 httpApp.use(app);
 
 httpApp.listen(HTTP_PORT, HOST, () => {
-  console.log(`HTTP  listening on ${HOST}:${HTTP_PORT}（页面 GET 将跳转到 HTTPS ${HTTPS_PORT}）`);
+  if (BEHIND_NGINX) {
+    console.log(`HTTP  listening on ${HOST}:${HTTP_PORT}（Nginx 反向代理，无 HTTP→HTTPS 跳转）`);
+    if (PUBLIC_URL) console.log(`  Public:  ${PUBLIC_URL}`);
+  } else if (ENABLE_HTTPS && !DISABLE_HTTP_TO_HTTPS_REDIRECT) {
+    const redirectHint = PUBLIC_URL || (PUBLIC_HTTPS_PORT === 443 ? 'HTTPS 443' : `HTTPS ${HTTPS_PORT}`);
+    console.log(`HTTP  listening on ${HOST}:${HTTP_PORT}（页面 GET 将跳转到 ${redirectHint}）`);
+  } else {
+    console.log(`HTTP  listening on ${HOST}:${HTTP_PORT}`);
+  }
   printAccessUrls('http', HTTP_PORT);
-  printMobileAccessGuide(HTTPS_PORT, HTTP_PORT, ENABLE_HTTPS);
+  printMobileAccessGuide(HTTPS_PORT, HTTP_PORT, ENABLE_HTTPS, {
+    behindNginx: BEHIND_NGINX,
+    publicUrl: PUBLIC_URL,
+  });
   if (process.env.DEBUG_UPLOAD === undefined) {
     console.log('[TIP] 图片上传排错：在 .env 设置 DEBUG_UPLOAD=1，失败时响应含 uploadId 与 debug');
   }

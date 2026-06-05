@@ -270,6 +270,8 @@ HOST=127.0.0.1
 HTTP_PORT=3001
 PORT=3001
 ENABLE_HTTPS=0
+BEHIND_NGINX=1
+PUBLIC_URL=https://aigckzsy.sebri.cn
 
 # 生产关闭调试与临时隧道
 DEBUG_UPLOAD=0
@@ -285,10 +287,15 @@ ALIYUN_NLS_APP_KEY=
 # IMGBB_API_KEY=
 ```
 
+> **正确访问地址**：`https://aigckzsy.sebri.cn`（标准 443，**不要**加 `:3000`）。  
+> Nginx 443 终止 SSL 后 `proxy_pass http://127.0.0.1:3001`；Node 不再监听 3000、不再把页面重定向到 `https://域名:3000`。
+
 
 | 变量               | 生产建议 | 说明                                  |
 | ---------------- | ---- | ----------------------------------- |
 | `ENABLE_HTTPS=0` | 必填   | 关闭 Node 自签 HTTPS，避免与 Nginx 443 端口冲突 |
+| `BEHIND_NGINX=1` | 必填   | 关闭 HTTP→HTTPS 跳转（否则浏览器会被重定向到 `:3000` 并报 SSL 错误） |
+| `PUBLIC_URL`     | 推荐   | 对外 HTTPS 地址，如 `https://aigckzsy.sebri.cn`（无端口） |
 | `HOST=127.0.0.1` | 推荐   | 后端只接受本机连接，不直接暴露公网                   |
 | `HTTP_PORT=3001` | 推荐   | Nginx `proxy_pass` 指向此端口            |
 | `DEBUG_UPLOAD`   | `0`  | 关闭上传调试信息返回                          |
@@ -395,7 +402,7 @@ curl -s http://127.0.0.1:3001/api/health
 sudo nano /etc/nginx/sites-available/aichater
 ```
 
-将 `your-domain.com` 替换为实际域名（或使用服务器 IP 做 `server_name`）：
+将 `your-domain.com` 替换为实际域名（示例：`aigckzsy.sebri.cn`）：
 
 ```nginx
 # 上游：Node 应用（与 .env 中 HTTP_PORT 一致）
@@ -408,7 +415,7 @@ upstream aichater_backend {
 server {
     listen 80;
     listen [::]:80;
-    server_name your-domain.com;
+    server_name aigckzsy.sebri.cn;
 
     location /.well-known/acme-challenge/ {
         root /var/www/certbot;
@@ -422,11 +429,10 @@ server {
 server {
     listen 443 ssl http2;
     listen [::]:443 ssl http2;
-    server_name your-domain.com;
+    server_name aigckzsy.sebri.cn;
 
-    # Certbot 申请证书后会自动写入以下两行；首次可先注释，见第 5 节
-    # ssl_certificate     /etc/letsencrypt/live/your-domain.com/fullchain.pem;
-    # ssl_certificate_key /etc/letsencrypt/live/your-domain.com/privkey.pem;
+    ssl_certificate     /path/to/fullchain.pem;
+    ssl_certificate_key /path/to/privkey.pem;
 
     ssl_session_timeout 1d;
     ssl_session_cache shared:SSL:10m;
@@ -435,7 +441,6 @@ server {
     # 图片上传（与 server.js 中 multer 20MB 限制一致）
     client_max_body_size 20m;
 
-    # 访问日志（可按需调整路径）
     access_log /var/log/nginx/aichater.access.log;
     error_log  /var/log/nginx/aichater.error.log;
 
@@ -455,13 +460,14 @@ server {
         proxy_request_buffering  off;
         chunked_transfer_encoding on;
 
-        # AI 回复较慢时防止 Nginx 提前断开
         proxy_connect_timeout 10s;
         proxy_send_timeout    300s;
         proxy_read_timeout    300s;
     }
 }
 ```
+
+用户浏览器访问 **`https://aigckzsy.sebri.cn`**（无 `:3000`）。勿将 443 指到 Node 3000，也勿对外暴露 3000/3001。
 
 #### 4.2 启用站点
 
@@ -527,7 +533,7 @@ curl -s https://your-domain.com/sessions
 # node test.mjs
 ```
 
-浏览器打开 `https://your-domain.com`，依次验证：
+浏览器打开 `https://aigckzsy.sebri.cn`（或你的域名），依次验证：
 
 1. 页面正常加载、可创建会话
 2. 文字对话流式输出
@@ -556,6 +562,8 @@ curl -s https://your-domain.com/sessions
 
 | 现象              | 可能原因            | 处理                                                          |
 | --------------- | --------------- | ----------------------------------------------------------- |
+| 访问域名自动变成 `:3000` | Node 把 HTTP 页面重定向到 `https://host:3000` | `.env` 设 `BEHIND_NGINX=1`、`ENABLE_HTTPS=0`、`PUBLIC_URL=https://域名`；Nginx 443 → `127.0.0.1:3001` |
+| `ERR_SSL_PROTOCOL_ERROR` | 用 HTTPS 访问 Node 3000（该端口为 HTTP 或自签 HTTPS） | 用户只访问 `https://域名`（443）；勿访问 `:3000` |
 | 502 Bad Gateway | Node 未启动或端口不对   | `pm2 status`；确认 `.env` 中 `HTTP_PORT=3001` 与 `proxy_pass` 一致 |
 | AI 回复一次性才显示     | Nginx 缓冲未关      | 确认 `proxy_buffering off` 并已 `reload nginx`                  |
 | 图片上传 413        | 请求体超限           | 增大 `client_max_body_size`                                   |
