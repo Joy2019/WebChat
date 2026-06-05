@@ -368,14 +368,12 @@ if (!isAliyunSttConfigured()) {
 }
 
 app.use(express.static('public'));
-const PROJECT_ASSETS_DIR = 'd:\\repository\\AIChater\\assets';
+const PROJECT_ASSETS_DIR = path.join(process.cwd(), 'assets');
 if (fs.existsSync(PROJECT_ASSETS_DIR)) {
   app.use('/assets', express.static(PROJECT_ASSETS_DIR));
 }
-const CURSOR_ASSETS_DIR =
-  process.env.CURSOR_ASSETS_DIR ||
-  'C:\\Users\\hdu002\\.cursor\\projects\\d-repository-AIChater\\assets';
-if (fs.existsSync(CURSOR_ASSETS_DIR)) {
+const CURSOR_ASSETS_DIR = process.env.CURSOR_ASSETS_DIR;
+if (CURSOR_ASSETS_DIR && fs.existsSync(CURSOR_ASSETS_DIR)) {
   app.use('/cursor-assets', express.static(CURSOR_ASSETS_DIR));
 }
 app.use(express.json());
