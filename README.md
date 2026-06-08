@@ -13,8 +13,12 @@ AIChater/
 │   ├── style.css       # 全局样式（含暗/亮主题 CSS 变量）
 │   ├── app.js          # 前端逻辑（会话管理、流式渲染、图片/链接解析、主题切换）
 │   └── links.json      # 右侧第三方链接配置（可控制显隐）
+├── data/
+│   └── sessions.db     # SQLite 会话持久化（运行时生成，不提交 Git）
+├── lib/
+│   └── sessions-db.js  # 会话/消息 SQLite 存储层
 ├── server.js           # Express 后端（Coze 流式代理、会话 API、图片公开上传）
-├── test.mjs            # 冒烟测试（7 个 API 用例）
+├── test.mjs            # 冒烟测试（API 用例 + 持久化读写）
 ├── scripts/
 │   ├── mirror-push.ps1 # Windows：双端 push（origin + gitee）
 │   └── mirror-push.sh  # Linux/macOS：双端 push
@@ -304,8 +308,23 @@ ALIYUN_NLS_APP_KEY=
 创建运行所需目录：
 
 ```bash
-mkdir -p uploads logs
+mkdir -p uploads logs data
 ```
+
+首次启动后会在 `data/sessions.db` 自动创建 SQLite 数据库，会话与消息在 **服务重启后仍保留**。
+
+**备份建议**（生产环境定期执行）：
+
+```bash
+# 停服后备份（或在线备份 WAL 模式下的 db 文件）
+cp /var/www/AIChater/data/sessions.db /var/backups/aichater-sessions-$(date +%F).db
+
+# 若存在 WAL 文件，一并备份
+cp /var/www/AIChater/data/sessions.db-wal /var/backups/ 2>/dev/null || true
+cp /var/www/AIChater/data/sessions.db-shm /var/backups/ 2>/dev/null || true
+```
+
+恢复时停止服务、替换 `data/sessions.db` 后 `pm2 restart aichater` 即可。
 
 ---
 
@@ -615,7 +634,7 @@ sudo nginx -t && sudo systemctl reload nginx
 | 后端     | Node.js 18+ / Express 4 / Multer / form-data                |
 | AI 接口  | [Coze Open API](https://www.coze.cn/docs) + `@coze/api` SDK |
 | 图片托管   | imgbb API / sm.ms API（公开图床，按优先级自动选择）                        |
-| 会话存储   | 内存（重启后清空；生产环境建议接入 SQLite / Redis）                           |
+| 会话存储   | SQLite（`data/sessions.db`，WAL 模式，重启不丢失）                            |
 | 进程守护   | PM2（生产部署）                                                   |
 | Web 服务 | Nginx（反向代理 + SSL）                                           |
 
@@ -626,7 +645,7 @@ sudo nginx -t && sudo systemctl reload nginx
 
 - `.env` 文件含敏感 Token，**不要提交到 Git**
 - 生产服务器若无法访问 GitHub，请按 [DEPLOY_MIRROR.md](./DEPLOY_MIRROR.md) 配置 Gitee 镜像后再 `git pull`
-- 会话数据存在内存中，服务重启后丢失；生产环境建议接入数据库
+- 会话数据持久化在 `data/sessions.db`，请定期备份该文件（见上文「备份建议」）
 - Coze PAT 有效期最长 90 天，到期需重新生成并更新 `.env`
 - 图片上传至公开图床（imgbb / sm.ms），请勿上传含敏感信息的图片；如有需求可在 `.env` 中不配置 `IMGBB_API_KEY` 并修改 `server.js` 改用私有图床
 - `uploads/` 目录存放临时文件，上传处理后自动删除

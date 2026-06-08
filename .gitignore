@@ -8,6 +8,10 @@ node_modules/
 uploads/*
 !uploads/.gitkeep
 
+# SQLite 会话数据库（保留 data/ 目录）
+data/*
+!data/.gitkeep
+
 # 系统文件
 .DS_Store
 Thumbs.db

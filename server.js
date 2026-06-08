@@ -20,6 +20,21 @@ import {
   transcribeWithAliyun,
   validateAliyunSttConfig,
 } from './lib/aliyun-stt.js';
+import {
+  initSessionsDb,
+  createSession,
+  listSessions,
+  getSession,
+  sessionExists,
+  updateSessionTitle,
+  deleteSession,
+  deleteAllSessions,
+  clearSessionMessages,
+  addMessage,
+  countUserMessages,
+  updateSessionTitleIfDefault,
+  touchSession,
+} from './lib/sessions-db.js';
 
 dotenv.config();
 
@@ -378,8 +393,8 @@ if (CURSOR_ASSETS_DIR && fs.existsSync(CURSOR_ASSETS_DIR)) {
 }
 app.use(express.json());
 
-// 简单内存会话存储（重启会丢失）
-const sessions = [];
+initSessionsDb();
+
 const OPENING_MESSAGE =
   '同学你好，我是你的化工过程控制实验助教。\n' +
   '无论你是准备开始一个新实验、在操作中卡住了，还是拿到数据不知道怎么分析，都可以直接问我。' +
@@ -445,36 +460,29 @@ app.post('/sessions', (req, res) => {
   const id = randomUUID();
   const title = (req.body?.title || '新会话').slice(0, 50);
   const now = Date.now();
-  const session = {
+  const session = createSession({
     id,
     title,
     createdAt: now,
     updatedAt: now,
-    messages: [
-      {
-        role: 'assistant',
-        content: OPENING_MESSAGE,
-        refs: [],
-        ts: now,
-      },
-    ],
-  };
-  sessions.unshift(session);
+    openingMessage: {
+      role: 'assistant',
+      content: OPENING_MESSAGE,
+      refs: [],
+      ts: now,
+    },
+  });
   res.json(session);
 });
 
 // 列出会话
 app.get('/sessions', (_req, res) => {
-  const list = sessions.map(({ messages, ...rest }) => ({
-    ...rest,
-    lastMessage: messages[messages.length - 1]?.content || '',
-  }));
-  res.json(list);
+  res.json(listSessions());
 });
 
 // 获取单个会话历史
 app.get('/sessions/:id', (req, res) => {
-  const session = sessions.find((s) => s.id === req.params.id);
+  const session = getSession(req.params.id);
   if (!session) {
     res.status(404).json({ error: 'session not found' });
     return;
@@ -484,20 +492,17 @@ app.get('/sessions/:id', (req, res) => {
 
 // 清空单个会话消息
 app.delete('/sessions/:id/messages', (req, res) => {
-  const session = sessions.find((s) => s.id === req.params.id);
-  if (!session) {
+  if (!sessionExists(req.params.id)) {
     res.status(404).json({ error: 'session not found' });
     return;
   }
-  session.messages = [];
-  session.updatedAt = Date.now();
+  clearSessionMessages(req.params.id, Date.now());
   res.json({ ok: true });
 });
 
 // 重命名会话
 app.patch('/sessions/:id', (req, res) => {
-  const session = sessions.find((s) => s.id === req.params.id);
-  if (!session) {
+  if (!sessionExists(req.params.id)) {
     res.status(404).json({ error: 'session not found' });
     return;
   }
@@ -506,25 +511,23 @@ app.patch('/sessions/:id', (req, res) => {
     res.status(400).json({ error: 'title is required' });
     return;
   }
-  session.title = nextTitle;
-  session.updatedAt = Date.now();
-  res.json(session);
+  const now = Date.now();
+  updateSessionTitle(req.params.id, nextTitle, now);
+  res.json(getSession(req.params.id));
 });
 
 // 删除单个会话
 app.delete('/sessions/:id', (req, res) => {
-  const idx = sessions.findIndex((s) => s.id === req.params.id);
-  if (idx === -1) {
+  if (!deleteSession(req.params.id)) {
     res.status(404).json({ error: 'session not found' });
     return;
   }
-  sessions.splice(idx, 1);
   res.json({ ok: true });
 });
 
 // 清空全部会话
 app.delete('/sessions', (_req, res) => {
-  sessions.splice(0, sessions.length);
+  deleteAllSessions();
   res.json({ ok: true });
 });
 
@@ -616,8 +619,7 @@ app.post('/chat/stream', multerSingle('image'), async (req, res) => {
 
   try {
     const sessionId = req.body?.sessionId;
-    const session = sessions.find((s) => s.id === sessionId);
-    if (!session) {
+    if (!sessionId || !sessionExists(sessionId)) {
       res.status(400).json({ error: 'invalid sessionId', uploadId });
       return;
     }
@@ -745,15 +747,17 @@ app.post('/chat/stream', multerSingle('image'), async (req, res) => {
           content_type: 'text',
         };
 
+    const now = Date.now();
+
     // 用户第一问后，自动将暂定标题改成问题关键词短语
-    const userMessageCount = session.messages.filter((m) => m.role === 'user').length;
-    if (session.title === '新会话' && userMessageCount === 0 && message) {
-      session.title = buildSessionTitleFromQuestion(message);
+    const userMessageCount = countUserMessages(sessionId);
+    if (userMessageCount === 0 && message) {
+      updateSessionTitleIfDefault(sessionId, buildSessionTitleFromQuestion(message), now);
     }
 
     // 保存用户消息到会话
-    session.messages.push({ role: 'user', content: message, image: hasImage, ts: Date.now() });
-    session.updatedAt = Date.now();
+    addMessage(sessionId, { role: 'user', content: message, image: hasImage, ts: now });
+    touchSession(sessionId, now);
 
     // 以 NDJSON 输出：每行一个 JSON，前端可边读边解析
     res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
@@ -824,15 +828,16 @@ app.post('/chat/stream', multerSingle('image'), async (req, res) => {
     }
 
     // 收尾
-    session.messages.push({
+    const doneAt = Date.now();
+    addMessage(sessionId, {
       role: 'assistant',
       content: aiBuffer.trim(),
       refs: recallRefs,
       conversationId,
       sectionId,
-      ts: Date.now(),
+      ts: doneAt,
     });
-    session.updatedAt = Date.now();
+    touchSession(sessionId, doneAt);
 
     res.end(`${JSON.stringify({ type: 'done' })}\n`);
   } catch (e) {
