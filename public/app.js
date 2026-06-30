@@ -21,7 +21,14 @@ const sidebarBackdrop = document.getElementById('sidebar-backdrop');
 const voiceInputBtn = document.getElementById('voice-input-btn');
 const voiceOutputBtn = document.getElementById('voice-output-btn');
 const uploadBtn = document.getElementById('upload-btn');
-const ASSISTANT_NAME = 'AI智能助手';
+const APP_CONFIG_DEFAULTS = {
+  appTitle: '过程控制实验AI智能助手',
+  logoUrl: '/assets/logo.png',
+  logoAlt: 'logo',
+  assistantName: 'AI智能助手',
+};
+
+let ASSISTANT_NAME = APP_CONFIG_DEFAULTS.assistantName;
 const USER_NAME = '学员';
 const MOBILE_MQ = window.matchMedia('(max-width: 768px)');
 
@@ -777,6 +784,32 @@ clearCurrentBtn.addEventListener('click', async () => {
     alert(`清空失败：${err?.message || String(err)}`);
   }
 });
+
+async function loadAppConfig() {
+  try {
+    const res = await fetch('/config.json', { cache: 'no-store' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const config = await res.json();
+    const appTitle = config.appTitle || APP_CONFIG_DEFAULTS.appTitle;
+    const logoUrl = config.logoUrl || APP_CONFIG_DEFAULTS.logoUrl;
+    const logoAlt = config.logoAlt ?? APP_CONFIG_DEFAULTS.logoAlt;
+    ASSISTANT_NAME = config.assistantName || APP_CONFIG_DEFAULTS.assistantName;
+
+    document.title = appTitle;
+    const logoEl = document.querySelector('.top-logo');
+    if (logoEl) {
+      logoEl.src = logoUrl;
+      logoEl.alt = logoAlt;
+    }
+    const titleEl = document.querySelector('.top-title-text');
+    if (titleEl) titleEl.textContent = appTitle;
+    if (sessionTitle && !currentSessionId) {
+      sessionTitle.textContent = ASSISTANT_NAME;
+    }
+  } catch (e) {
+    console.warn('config.json 加载失败，使用默认配置', e);
+  }
+}
 
 async function loadLinks() {
   const rightbar = document.querySelector('.rightbar');
@@ -1933,12 +1966,13 @@ function initWebSpeechVoiceInput() {
 initVoiceOutput();
 initVoiceInput();
 
-// 初始化（等待会话列表/自动新建完成后再交互，避免未选中会话就发送）
+// 初始化（等待配置与会话列表/自动新建完成后再交互，避免未选中会话就发送）
 loadLinks();
 (async () => {
   try {
+    await loadAppConfig();
     await fetchSessions();
   } catch (e) {
-    console.error('会话列表加载失败', e);
+    console.error('初始化失败', e);
   }
 })();

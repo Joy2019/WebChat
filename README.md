@@ -12,6 +12,7 @@ AIChater/
 │   ├── index.html      # 主页面（三栏布局）
 │   ├── style.css       # 全局样式（含暗/亮主题 CSS 变量）
 │   ├── app.js          # 前端逻辑（会话管理、流式渲染、图片/链接解析、主题切换）
+│   ├── config.json     # 应用标题、Logo、助手名称等品牌配置（刷新即生效）
 │   └── links.json      # 右侧第三方链接配置（可控制显隐）
 ├── data/
 │   └── sessions.db     # SQLite 会话持久化（运行时生成，不提交 Git）
@@ -113,6 +114,30 @@ npm start
 6. **第三方链接**：右侧栏展示配置的链接，点击跳转
 7. **主题切换**：点击右上角 🌙/☀️ 按钮切换暗/亮色主题
 8. **语音输入（🎤）**：默认使用**阿里云一句话识别**（服务端 STT，大陆可用）。在 `.env` 配置 `ALIYUN_ACCESS_KEY_ID`、`ALIYUN_ACCESS_KEY_SECRET` 与 `ALIYUN_NLS_APP_KEY`（见 `.env.example`）。iPhone Safari 仍可走浏览器 Web Speech 快速路径；安卓 Chrome / 网页语音无响应时会自动改用服务端识别。详见 [VOICE_TEST.md](./VOICE_TEST.md)。
+
+---
+
+## 自定义品牌（标题 / Logo / 助手名）
+
+编辑 `public/config.json`（保存后**刷新页面**立即生效，无需重启服务）：
+
+```json
+{
+  "appTitle": "过程控制实验AI智能助手",
+  "logoUrl": "/assets/logo.png",
+  "logoAlt": "logo",
+  "assistantName": "AI智能助手"
+}
+```
+
+| 字段 | 说明 |
+| --- | --- |
+| `appTitle` | 浏览器标签页标题、顶部栏主标题 |
+| `logoUrl` | 顶部 Logo 图片路径（可指向 `public/assets/` 下任意图片，或完整 URL） |
+| `logoAlt` | Logo 的 `alt` 无障碍文本 |
+| `assistantName` | 会话区标题、聊天气泡角色名、「正在思考」提示等 |
+
+替换 Logo：将图片放到 `public/assets/`（或任意可访问路径），修改 `logoUrl` 后刷新即可。若 `config.json` 加载失败，页面会使用 HTML 内嵌的默认值。
 
 ---
 
