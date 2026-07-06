@@ -2,5 +2,13 @@
   "appTitle": "过程控制实验AI智能助手",
   "logoUrl": "/assets/logo.png",
   "logoAlt": "logo",
-  "assistantName": "AI智能助手"
+  "assistantName": "AI智能助手",
+  "themes": [
+    { "id": "light", "label": "亮色" },
+    { "id": "dark", "label": "暗色" },
+    { "id": "blue", "label": "科技蓝" },
+    { "id": "green", "label": "护眼绿" },
+    { "id": "purple", "label": "紫罗兰" },
+    { "id": "warm", "label": "暖橙色" }
+  ]
 }

@@ -1,5 +1,39 @@
 /* ===== CSS 变量：主题 ===== */
 :root,
+[data-theme="light"] {
+  --bg-body:        linear-gradient(135deg, #e2e8f0, #f8fafc);
+  --bg-app:         rgba(255, 255, 255, 0.97);
+  --bg-sidebar:     rgba(241, 245, 249, 0.9);
+  --bg-rightbar:    rgba(241, 245, 249, 0.9);
+  --bg-chat:        linear-gradient(135deg, rgba(226,232,240,0.5), rgba(248,250,252,0.8));
+  --bg-bubble-ai:   rgba(255, 255, 255, 0.9);
+  --bg-textarea:    rgba(255, 255, 255, 0.95);
+  --bg-session:     rgba(226, 232, 240, 0.7);
+  --bg-link-item:   rgba(226, 232, 240, 0.7);
+  --bg-refs-a:      rgba(219, 234, 254, 0.5);
+  --bg-refs-a-hov:  rgba(199, 210, 254, 0.6);
+
+  --border:         rgba(148, 163, 184, 0.6);
+  --border-header:  rgba(148, 163, 184, 0.5);
+  --border-input:   rgba(148, 163, 184, 0.7);
+  --border-bubble:  rgba(148, 163, 184, 0.5);
+  --border-refs:    rgba(148, 163, 184, 0.5);
+
+  --text-main:      #0f172a;
+  --text-sub:       #64748b;
+  --text-link:      #2563eb;
+  --text-ghost:     #1e293b;
+
+  --scrollbar-track:  rgba(203, 213, 225, 0.5);
+  --scrollbar-thumb:  rgba(99, 102, 241, 0.5);
+  --scrollbar-hover:  rgba(99, 102, 241, 0.8);
+
+  --modal-bg:       rgba(0,0,0,0.55);
+  --modal-img-bg:   #f8fafc;
+  --topbar-bg:      #2563eb;
+  --topbar-text:    #ffffff;
+}
+
 [data-theme="dark"] {
   --bg-body:        linear-gradient(135deg, #475569, #1e293b);
   --bg-app:         rgba(30, 41, 59, 0.95);
@@ -32,41 +66,141 @@
   --modal-img-bg:   #020617;
   --topbar-bg:      var(--bg-app);
   --topbar-text:    var(--text-main);
-
-  --theme-btn-label: "🌙 暗色";
 }
 
-[data-theme="light"] {
-  --bg-body:        linear-gradient(135deg, #e2e8f0, #f8fafc);
-  --bg-app:         rgba(255, 255, 255, 0.97);
-  --bg-sidebar:     rgba(241, 245, 249, 0.9);
-  --bg-rightbar:    rgba(241, 245, 249, 0.9);
-  --bg-chat:        linear-gradient(135deg, rgba(226,232,240,0.5), rgba(248,250,252,0.8));
-  --bg-bubble-ai:   rgba(255, 255, 255, 0.9);
-  --bg-textarea:    rgba(255, 255, 255, 0.95);
-  --bg-session:     rgba(226, 232, 240, 0.7);
-  --bg-link-item:   rgba(226, 232, 240, 0.7);
-  --bg-refs-a:      rgba(219, 234, 254, 0.5);
-  --bg-refs-a-hov:  rgba(199, 210, 254, 0.6);
+[data-theme="blue"] {
+  --bg-body:        linear-gradient(135deg, #0c4a6e, #082f49);
+  --bg-app:         rgba(8, 47, 73, 0.96);
+  --bg-sidebar:     rgba(12, 74, 110, 0.55);
+  --bg-rightbar:    rgba(12, 74, 110, 0.55);
+  --bg-chat:        linear-gradient(135deg, rgba(14,165,233,0.12), rgba(8,47,73,0.65));
+  --bg-bubble-ai:   rgba(12, 74, 110, 0.75);
+  --bg-textarea:    rgba(12, 74, 110, 0.7);
+  --bg-session:     rgba(14, 116, 144, 0.35);
+  --bg-link-item:   rgba(14, 116, 144, 0.35);
+  --bg-refs-a:      rgba(14, 165, 233, 0.15);
+  --bg-refs-a-hov:  rgba(14, 165, 233, 0.28);
 
-  --border:         rgba(148, 163, 184, 0.6);
-  --border-header:  rgba(148, 163, 184, 0.5);
-  --border-input:   rgba(148, 163, 184, 0.7);
-  --border-bubble:  rgba(148, 163, 184, 0.5);
-  --border-refs:    rgba(148, 163, 184, 0.5);
+  --border:         rgba(56, 189, 248, 0.35);
+  --border-header:  rgba(56, 189, 248, 0.4);
+  --border-input:   rgba(56, 189, 248, 0.45);
+  --border-bubble:  rgba(56, 189, 248, 0.4);
+  --border-refs:    rgba(56, 189, 248, 0.35);
 
-  --text-main:      #0f172a;
-  --text-sub:       #64748b;
-  --text-link:      #2563eb;
-  --text-ghost:     #1e293b;
+  --text-main:      #e0f2fe;
+  --text-sub:       #7dd3fc;
+  --text-link:      #38bdf8;
+  --text-ghost:     #bae6fd;
 
-  --scrollbar-track:  rgba(203, 213, 225, 0.5);
-  --scrollbar-thumb:  rgba(99, 102, 241, 0.5);
-  --scrollbar-hover:  rgba(99, 102, 241, 0.8);
+  --scrollbar-track:  rgba(12, 74, 110, 0.4);
+  --scrollbar-thumb:  rgba(14, 165, 233, 0.65);
+  --scrollbar-hover:  rgba(56, 189, 248, 0.85);
 
-  --modal-bg:       rgba(0,0,0,0.55);
-  --modal-img-bg:   #f8fafc;
-  --topbar-bg:      #2563eb;
+  --modal-bg:       rgba(0,0,0,0.78);
+  --modal-img-bg:   #082f49;
+  --topbar-bg:      #0369a1;
+  --topbar-text:    #f0f9ff;
+}
+
+[data-theme="green"] {
+  --bg-body:        linear-gradient(135deg, #ecfdf5, #d1fae5);
+  --bg-app:         rgba(240, 253, 244, 0.97);
+  --bg-sidebar:     rgba(220, 252, 231, 0.92);
+  --bg-rightbar:    rgba(220, 252, 231, 0.92);
+  --bg-chat:        linear-gradient(135deg, rgba(167,243,208,0.45), rgba(236,253,245,0.85));
+  --bg-bubble-ai:   rgba(255, 255, 255, 0.92);
+  --bg-textarea:    rgba(255, 255, 255, 0.96);
+  --bg-session:     rgba(187, 247, 208, 0.55);
+  --bg-link-item:   rgba(187, 247, 208, 0.55);
+  --bg-refs-a:      rgba(167, 243, 208, 0.45);
+  --bg-refs-a-hov:  rgba(134, 239, 172, 0.6);
+
+  --border:         rgba(74, 222, 128, 0.45);
+  --border-header:  rgba(74, 222, 128, 0.4);
+  --border-input:   rgba(74, 222, 128, 0.5);
+  --border-bubble:  rgba(74, 222, 128, 0.4);
+  --border-refs:    rgba(74, 222, 128, 0.4);
+
+  --text-main:      #14532d;
+  --text-sub:       #4d7c0f;
+  --text-link:      #059669;
+  --text-ghost:     #166534;
+
+  --scrollbar-track:  rgba(187, 247, 208, 0.5);
+  --scrollbar-thumb:  rgba(16, 185, 129, 0.55);
+  --scrollbar-hover:  rgba(5, 150, 105, 0.75);
+
+  --modal-bg:       rgba(0,0,0,0.5);
+  --modal-img-bg:   #ecfdf5;
+  --topbar-bg:      #059669;
+  --topbar-text:    #ffffff;
+}
+
+[data-theme="purple"] {
+  --bg-body:        linear-gradient(135deg, #2e1065, #4c1d95);
+  --bg-app:         rgba(46, 16, 101, 0.95);
+  --bg-sidebar:     rgba(76, 29, 149, 0.45);
+  --bg-rightbar:    rgba(76, 29, 149, 0.45);
+  --bg-chat:        linear-gradient(135deg, rgba(139,92,246,0.15), rgba(46,16,101,0.65));
+  --bg-bubble-ai:   rgba(76, 29, 149, 0.55);
+  --bg-textarea:    rgba(76, 29, 149, 0.5);
+  --bg-session:     rgba(109, 40, 217, 0.35);
+  --bg-link-item:   rgba(109, 40, 217, 0.35);
+  --bg-refs-a:      rgba(167, 139, 250, 0.2);
+  --bg-refs-a-hov:  rgba(167, 139, 250, 0.35);
+
+  --border:         rgba(167, 139, 250, 0.4);
+  --border-header:  rgba(167, 139, 250, 0.45);
+  --border-input:   rgba(167, 139, 250, 0.5);
+  --border-bubble:  rgba(167, 139, 250, 0.45);
+  --border-refs:    rgba(167, 139, 250, 0.4);
+
+  --text-main:      #f5f3ff;
+  --text-sub:       #c4b5fd;
+  --text-link:      #a78bfa;
+  --text-ghost:     #ede9fe;
+
+  --scrollbar-track:  rgba(76, 29, 149, 0.4);
+  --scrollbar-thumb:  rgba(139, 92, 246, 0.65);
+  --scrollbar-hover:  rgba(167, 139, 250, 0.85);
+
+  --modal-bg:       rgba(0,0,0,0.78);
+  --modal-img-bg:   #1e1b4b;
+  --topbar-bg:      #7c3aed;
+  --topbar-text:    #faf5ff;
+}
+
+[data-theme="warm"] {
+  --bg-body:        linear-gradient(135deg, #fff7ed, #ffedd5);
+  --bg-app:         rgba(255, 251, 235, 0.97);
+  --bg-sidebar:     rgba(254, 243, 199, 0.9);
+  --bg-rightbar:    rgba(254, 243, 199, 0.9);
+  --bg-chat:        linear-gradient(135deg, rgba(254,215,170,0.5), rgba(255,251,235,0.85));
+  --bg-bubble-ai:   rgba(255, 255, 255, 0.92);
+  --bg-textarea:    rgba(255, 255, 255, 0.96);
+  --bg-session:     rgba(254, 215, 170, 0.55);
+  --bg-link-item:   rgba(254, 215, 170, 0.55);
+  --bg-refs-a:      rgba(253, 186, 116, 0.4);
+  --bg-refs-a-hov:  rgba(251, 146, 60, 0.5);
+
+  --border:         rgba(251, 146, 60, 0.45);
+  --border-header:  rgba(251, 146, 60, 0.4);
+  --border-input:   rgba(251, 146, 60, 0.5);
+  --border-bubble:  rgba(251, 146, 60, 0.4);
+  --border-refs:    rgba(251, 146, 60, 0.4);
+
+  --text-main:      #7c2d12;
+  --text-sub:       #c2410c;
+  --text-link:      #ea580c;
+  --text-ghost:     #9a3412;
+
+  --scrollbar-track:  rgba(254, 215, 170, 0.55);
+  --scrollbar-thumb:  rgba(249, 115, 22, 0.55);
+  --scrollbar-hover:  rgba(234, 88, 12, 0.75);
+
+  --modal-bg:       rgba(0,0,0,0.5);
+  --modal-img-bg:   #fff7ed;
+  --topbar-bg:      #ea580c;
   --topbar-text:    #ffffff;
 }
 
@@ -358,8 +492,108 @@ body.scroll-lock {
 }
 .ghost:hover { background: rgba(99,102,241,0.15); }
 
-/* 主题切换按钮 */
-.theme-btn { margin-left: auto; }
+/* 主题选择器 */
+.theme-picker {
+  position: relative;
+  margin-left: auto;
+}
+
+.theme-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.theme-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.5);
+  flex-shrink: 0;
+  background: #2563eb;
+}
+
+[data-theme="light"] .theme-swatch { background: #2563eb; }
+[data-theme="dark"] .theme-swatch { background: #475569; }
+[data-theme="blue"] .theme-swatch { background: #0ea5e9; }
+[data-theme="green"] .theme-swatch { background: #10b981; }
+[data-theme="purple"] .theme-swatch { background: #8b5cf6; }
+[data-theme="warm"] .theme-swatch { background: #f97316; }
+
+.theme-label {
+  max-width: 5em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.theme-chevron {
+  font-size: 10px;
+  opacity: 0.75;
+  flex-shrink: 0;
+}
+
+.theme-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 148px;
+  padding: 6px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-app);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
+  z-index: 1100;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.theme-menu[hidden] {
+  display: none;
+}
+
+.theme-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-main);
+  font-size: 14px;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s;
+}
+
+.theme-option:hover {
+  background: rgba(99, 102, 241, 0.1);
+}
+
+.theme-option.active {
+  background: rgba(99, 102, 241, 0.15);
+  font-weight: 600;
+}
+
+.theme-option-swatch {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border);
+  flex-shrink: 0;
+}
+
+.theme-option-swatch[data-theme-swatch="light"] { background: #2563eb; }
+.theme-option-swatch[data-theme-swatch="dark"] { background: #475569; }
+.theme-option-swatch[data-theme-swatch="blue"] { background: #0ea5e9; }
+.theme-option-swatch[data-theme-swatch="green"] { background: #10b981; }
+.theme-option-swatch[data-theme-swatch="purple"] { background: #8b5cf6; }
+.theme-option-swatch[data-theme-swatch="warm"] { background: #f97316; }
 
 .mobile-menu-btn,
 .links-drawer-close {
@@ -939,9 +1173,23 @@ body.scroll-lock {
     min-height: 40px;
   }
 
-  .theme-btn {
+  .theme-picker {
     margin-left: 0;
+  }
+
+  .theme-btn {
     min-height: 40px;
+    padding: 6px 8px;
+  }
+
+  .theme-label {
+    max-width: 4em;
+    font-size: 13px;
+  }
+
+  .theme-menu {
+    min-width: 136px;
+    right: 0;
   }
 
   .app-header {

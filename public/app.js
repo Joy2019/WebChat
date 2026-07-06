@@ -12,6 +12,9 @@ const imageModal = document.getElementById('image-modal');
 const imageModalImg = document.getElementById('image-modal-img');
 const linkList = document.getElementById('link-list');
 const themeBtn = document.getElementById('theme-btn');
+const themeMenu = document.getElementById('theme-menu');
+const themePicker = document.getElementById('theme-picker');
+const themeLabelEl = themeBtn?.querySelector('.theme-label');
 const pastePreview = document.getElementById('paste-preview');
 const pasteThumb = document.getElementById('paste-thumb');
 const pasteClear = document.getElementById('paste-clear');
@@ -272,23 +275,98 @@ initSidebarState();
 
 // ===== 主题切换 =====
 const THEME_KEY = 'aichater-theme';
-let currentTheme = localStorage.getItem(THEME_KEY) || 'light';
+const THEMES = [
+  { id: 'light', label: '亮色' },
+  { id: 'dark', label: '暗色' },
+  { id: 'blue', label: '科技蓝' },
+  { id: 'green', label: '护眼绿' },
+  { id: 'purple', label: '紫罗兰' },
+  { id: 'warm', label: '暖橙色' },
+];
+const THEME_IDS = new Set(THEMES.map((t) => t.id));
+let currentTheme = THEME_IDS.has(localStorage.getItem(THEME_KEY))
+  ? localStorage.getItem(THEME_KEY)
+  : 'light';
+let themeMenuOpen = false;
+
+function getThemeMeta(themeId) {
+  return THEMES.find((t) => t.id === themeId) || THEMES[0];
+}
+
+function renderThemeMenu() {
+  if (!themeMenu) return;
+  themeMenu.innerHTML = '';
+  for (const theme of THEMES) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = `theme-option${theme.id === currentTheme ? ' active' : ''}`;
+    btn.setAttribute('role', 'option');
+    btn.setAttribute('aria-selected', theme.id === currentTheme ? 'true' : 'false');
+    btn.dataset.theme = theme.id;
+
+    const swatch = document.createElement('span');
+    swatch.className = 'theme-option-swatch';
+    swatch.dataset.themeSwatch = theme.id;
+    swatch.setAttribute('aria-hidden', 'true');
+
+    const label = document.createElement('span');
+    label.textContent = theme.label;
+
+    btn.appendChild(swatch);
+    btn.appendChild(label);
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      applyTheme(theme.id);
+      closeThemeMenu();
+    });
+    themeMenu.appendChild(btn);
+  }
+}
+
+function updateThemeBtnLabel() {
+  if (!themeLabelEl) return;
+  themeLabelEl.textContent = getThemeMeta(currentTheme).label;
+}
+
+function setThemeMenuOpen(open) {
+  themeMenuOpen = !!open;
+  if (!themeMenu || !themeBtn) return;
+  themeMenu.hidden = !themeMenuOpen;
+  themeBtn.setAttribute('aria-expanded', themeMenuOpen ? 'true' : 'false');
+  if (themeMenuOpen) renderThemeMenu();
+}
+
+function closeThemeMenu() {
+  setThemeMenuOpen(false);
+}
+
+function toggleThemeMenu() {
+  setThemeMenuOpen(!themeMenuOpen);
+}
 
 function applyTheme(theme) {
+  if (!THEME_IDS.has(theme)) theme = 'light';
   currentTheme = theme;
   document.documentElement.setAttribute('data-theme', theme);
   localStorage.setItem(THEME_KEY, theme);
-  if (theme === 'dark') {
-    themeBtn.textContent = '🌙 暗色';
-  } else {
-    themeBtn.textContent = '☀️ 亮色';
-  }
+  updateThemeBtnLabel();
+  if (themeMenuOpen) renderThemeMenu();
 }
 
 applyTheme(currentTheme);
 
-themeBtn.addEventListener('click', () => {
-  applyTheme(currentTheme === 'dark' ? 'light' : 'dark');
+themeBtn?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  toggleThemeMenu();
+});
+
+document.addEventListener('click', (e) => {
+  if (!themeMenuOpen) return;
+  if (themePicker && !themePicker.contains(e.target)) closeThemeMenu();
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && themeMenuOpen) closeThemeMenu();
 });
 
 function openImageModal(src) {
