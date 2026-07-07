@@ -19,10 +19,10 @@
   --border-bubble:  rgba(148, 163, 184, 0.5);
   --border-refs:    rgba(148, 163, 184, 0.5);
 
-  --text-main:      #0f172a;
-  --text-sub:       #64748b;
+  --text-main:      #111111;
+  --text-sub:       #444444;
   --text-link:      #2563eb;
-  --text-ghost:     #1e293b;
+  --text-ghost:     #111111;
 
   --scrollbar-track:  rgba(203, 213, 225, 0.5);
   --scrollbar-thumb:  rgba(99, 102, 241, 0.5);
@@ -54,7 +54,7 @@
   --border-refs:    rgba(100, 116, 139, 0.5);
 
   --text-main:      #f1f5f9;
-  --text-sub:       #9ca3af;
+  --text-sub:       #cccccc;
   --text-link:      #60a5fa;
   --text-ghost:     #e5e7eb;
 
@@ -87,10 +87,10 @@
   --border-bubble:  rgba(56, 189, 248, 0.4);
   --border-refs:    rgba(56, 189, 248, 0.35);
 
-  --text-main:      #e0f2fe;
-  --text-sub:       #7dd3fc;
+  --text-main:      #f0f9ff;
+  --text-sub:       #cbd5e1;
   --text-link:      #38bdf8;
-  --text-ghost:     #bae6fd;
+  --text-ghost:     #e0f2fe;
 
   --scrollbar-track:  rgba(12, 74, 110, 0.4);
   --scrollbar-thumb:  rgba(14, 165, 233, 0.65);
@@ -121,10 +121,10 @@
   --border-bubble:  rgba(74, 222, 128, 0.4);
   --border-refs:    rgba(74, 222, 128, 0.4);
 
-  --text-main:      #14532d;
-  --text-sub:       #4d7c0f;
+  --text-main:      #111111;
+  --text-sub:       #444444;
   --text-link:      #059669;
-  --text-ghost:     #166534;
+  --text-ghost:     #111111;
 
   --scrollbar-track:  rgba(187, 247, 208, 0.5);
   --scrollbar-thumb:  rgba(16, 185, 129, 0.55);
@@ -156,8 +156,8 @@
   --border-refs:    rgba(167, 139, 250, 0.4);
 
   --text-main:      #f5f3ff;
-  --text-sub:       #c4b5fd;
-  --text-link:      #a78bfa;
+  --text-sub:       #ddd6fe;
+  --text-link:      #c4b5fd;
   --text-ghost:     #ede9fe;
 
   --scrollbar-track:  rgba(76, 29, 149, 0.4);
@@ -189,10 +189,10 @@
   --border-bubble:  rgba(251, 146, 60, 0.4);
   --border-refs:    rgba(251, 146, 60, 0.4);
 
-  --text-main:      #7c2d12;
-  --text-sub:       #c2410c;
+  --text-main:      #111111;
+  --text-sub:       #444444;
   --text-link:      #ea580c;
-  --text-ghost:     #9a3412;
+  --text-ghost:     #111111;
 
   --scrollbar-track:  rgba(254, 215, 170, 0.55);
   --scrollbar-thumb:  rgba(249, 115, 22, 0.55);
