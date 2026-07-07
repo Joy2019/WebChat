@@ -1,8 +1,9 @@
 {
-  "appTitle": "过程控制实验AI智能助手",
+  "appTitle": "特殊作业AI助手",
   "logoUrl": "/assets/logo.png",
   "logoAlt": "logo",
   "assistantName": "AI智能助手",
+  "openingMessage": "同学你好，我是你的化工过程控制实验助教。\n无论你是准备开始一个新实验、在操作中卡住了，还是拿到数据不知道怎么分析，都可以直接问我。我熟悉液位、流量、温度等典型对象的控制实验，也能帮你排查常见故障、整定 PID 参数、梳理实验报告思路。\n告诉我今天打算做哪个实验，或者直接描述你遇到的问题吧。",
   "themes": [
     { "id": "light", "label": "亮色" },
     { "id": "dark", "label": "暗色" },

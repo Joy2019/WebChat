@@ -395,11 +395,29 @@ app.use(express.json());
 
 initSessionsDb();
 
-const OPENING_MESSAGE =
+const CONFIG_PATH = path.join(process.cwd(), 'public', 'config.json');
+
+const DEFAULT_OPENING_MESSAGE =
   '同学你好，我是你的化工过程控制实验助教。\n' +
   '无论你是准备开始一个新实验、在操作中卡住了，还是拿到数据不知道怎么分析，都可以直接问我。' +
   '我熟悉液位、流量、温度等典型对象的控制实验，也能帮你排查常见故障、整定 PID 参数、梳理实验报告思路。\n' +
   '告诉我今天打算做哪个实验，或者直接描述你遇到的问题吧。';
+
+function getOpeningMessage() {
+  if (process.env.OPENING_MESSAGE) {
+    return process.env.OPENING_MESSAGE;
+  }
+  try {
+    const raw = fs.readFileSync(CONFIG_PATH, 'utf8');
+    const config = JSON.parse(raw);
+    if (typeof config.openingMessage === 'string' && config.openingMessage.trim()) {
+      return config.openingMessage;
+    }
+  } catch {
+    // config.json 缺失或格式错误时使用硬编码默认值
+  }
+  return DEFAULT_OPENING_MESSAGE;
+}
 
 function buildSessionTitleFromQuestion(text) {
   const src = String(text || '').replace(/\s+/g, ' ').trim();
@@ -467,7 +485,7 @@ app.post('/sessions', (req, res) => {
     updatedAt: now,
     openingMessage: {
       role: 'assistant',
-      content: OPENING_MESSAGE,
+      content: getOpeningMessage(),
       refs: [],
       ts: now,
     },

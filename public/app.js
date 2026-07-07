@@ -37,7 +37,7 @@ const MOBILE_MQ = window.matchMedia('(max-width: 768px)');
 
 let sessions = [];
 let currentSessionId = null;
-const OPENING_MESSAGE =
+let OPENING_MESSAGE =
   '同学你好，我是你的化工过程控制实验助教。\n' +
   '无论你是准备开始一个新实验、在操作中卡住了，还是拿到数据不知道怎么分析，都可以直接问我。' +
   '我熟悉液位、流量、温度等典型对象的控制实验，也能帮你排查常见故障、整定 PID 参数、梳理实验报告思路。\n' +
@@ -872,6 +872,9 @@ async function loadAppConfig() {
     const logoUrl = config.logoUrl || APP_CONFIG_DEFAULTS.logoUrl;
     const logoAlt = config.logoAlt ?? APP_CONFIG_DEFAULTS.logoAlt;
     ASSISTANT_NAME = config.assistantName || APP_CONFIG_DEFAULTS.assistantName;
+    if (typeof config.openingMessage === 'string' && config.openingMessage.trim()) {
+      OPENING_MESSAGE = config.openingMessage;
+    }
 
     document.title = appTitle;
     const logoEl = document.querySelector('.top-logo');
