@@ -541,8 +541,9 @@ body.scroll-lock {
   min-width: 148px;
   padding: 6px;
   border-radius: 10px;
-  border: 1px solid var(--border);
-  background: var(--bg-app);
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: #fff;
+  color: #111;
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
   z-index: 1100;
   display: flex;
@@ -554,7 +555,7 @@ body.scroll-lock {
   display: none;
 }
 
-.theme-option {
+.theme-menu .theme-option {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -563,7 +564,7 @@ body.scroll-lock {
   border: none;
   border-radius: 8px;
   background: transparent;
-  color: var(--text-main);
+  color: #111;
   font-size: 14px;
   font-family: inherit;
   cursor: pointer;
@@ -571,12 +572,14 @@ body.scroll-lock {
   transition: background 0.12s;
 }
 
-.theme-option:hover {
-  background: rgba(99, 102, 241, 0.1);
+.theme-menu .theme-option:hover {
+  background: #f0f0f0;
+  color: #111;
 }
 
-.theme-option.active {
-  background: rgba(99, 102, 241, 0.15);
+.theme-menu .theme-option.active {
+  background: rgba(99, 102, 241, 0.12);
+  color: #111;
   font-weight: 600;
 }
 
