@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>语音功能检测</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        max-width: 520px;
+        margin: 24px auto;
+        padding: 0 16px;
+        line-height: 1.5;
+      }
+      .ok { color: #15803d; }
+      .fail { color: #b91c1c; }
+      .warn { color: #b45309; }
+      button {
+        margin: 8px 8px 8px 0;
+        padding: 10px 14px;
+        font-size: 16px;
+      }
+      pre {
+        background: #f3f4f6;
+        padding: 12px;
+        border-radius: 8px;
+        overflow-x: auto;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      section {
+        margin: 20px 0;
+        padding: 12px 14px;
+        background: #fffbeb;
+        border: 1px solid #fcd34d;
+        border-radius: 8px;
+      }
+      section h2 { margin: 0 0 8px; font-size: 1.05rem; }
+      #diag-summary { font-weight: 600; margin: 8px 0 0; }
+    </style>
+  </head>
+  <body>
+    <h1>语音功能检测</h1>
+    <p>用于验证 H5 浏览器是否支持语音输入与朗读（需 HTTPS 或 localhost）。</p>
+    <ul id="checks"></ul>
+
+    <section id="blocked-section">
+      <h2>Web Speech 无文字？用服务端阿里云 STT</h2>
+      <p>
+        大陆安卓 Chrome 上 <code>onresult</code> 常永不触发（Google 服务被阻断）。
+        主应用 🎤 已默认或自动改用 <strong>阿里云一句话识别</strong>（需配置 <code>ALIYUN_*</code>）。
+      </p>
+      <p id="diag-summary">诊断：等待检测…</p>
+      <p>请用上方「测试服务端语音识别」验证；Web Speech 仅作对比。</p>
+    </section>
+
+    <button id="perm-btn" type="button">检测麦克风权限</button>
+    <button id="server-stt-btn" type="button">测试服务端语音识别（阿里云）</button>
+    <button id="mic-btn" type="button">按住测试 Web Speech</button>
+    <button id="mic-toggle-btn" type="button">点击开关 Web Speech</button>
+    <button id="speak-btn" type="button">测试朗读</button>
+    <pre id="log">等待操作…</pre>
+    <p><a href="/">返回聊天</a></p>
+    <script>
+      const checks = document.getElementById('checks');
+      const logEl = document.getElementById('log');
+      const diagSummary = document.getElementById('diag-summary');
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+      let micPermission = 'unknown';
+      let onresultEver = false;
+      let listenStartedAt = 0;
+
+      function isChromeAndroid() {
+        const ua = navigator.userAgent || '';
+        return /Android/i.test(ua) && /Chrome/i.test(ua) && !/Edg/i.test(ua);
+      }
+
+      function isSafariIOS() {
+        const ua = navigator.userAgent || '';
+        const ios = /iPad|iPhone|iPod/.test(ua) ||
+          (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        return ios && /Safari/i.test(ua) && !/CriOS|FxiOS|EdgiOS/i.test(ua);
+      }
+
+      function updateDiagSummary() {
+        const permOk = micPermission === 'granted';
+        const resultOk = onresultEver;
+        let line = '';
+        if (permOk && !resultOk) {
+          line = 'permission: ok · onresult: never — 非权限问题，多为语音识别服务无响应';
+          if (isChromeAndroid()) {
+            line += '（安卓 Chrome + 大陆网络常见）';
+          }
+          diagSummary.className = 'warn';
+        } else if (permOk && resultOk) {
+          line = 'permission: ok · onresult: ok — 网页语音识别正常';
+          diagSummary.className = 'ok';
+        } else if (micPermission === 'denied') {
+          line = 'permission: denied — 请在浏览器设置中允许麦克风';
+          diagSummary.className = 'fail';
+        } else {
+          line = '请先点「检测麦克风权限」，再测试语音识别';
+          diagSummary.className = '';
+        }
+        diagSummary.textContent = '诊断：' + line;
+      }
+
+      function addCheck(name, pass, detail) {
+        const li = document.createElement('li');
+        li.className = pass ? 'ok' : 'fail';
+        li.textContent = `${pass ? '✓' : '✗'} ${name}${detail ? ' — ' + detail : ''}`;
+        checks.appendChild(li);
+      }
+
+      const inApp =
+        /MicroMessenger/i.test(navigator.userAgent)
+          ? '微信内置'
+          : /QQ\//i.test(navigator.userAgent)
+            ? 'QQ内置'
+            : '';
+
+      addCheck('安全上下文 (HTTPS/localhost)', window.isSecureContext, location.protocol);
+      addCheck('SpeechRecognition', !!SpeechRecognition, inApp || undefined);
+      addCheck('speechSynthesis', !!window.speechSynthesis);
+      addCheck('MediaRecorder', !!window.MediaRecorder);
+      if (isChromeAndroid()) {
+        addCheck('环境提示', false, '安卓 Chrome：大陆网络下 onresult 常无响应（Google 服务）');
+      } else if (isSafariIOS()) {
+        addCheck('环境提示', true, 'Safari iOS：使用 Apple 语音服务，相对更稳');
+      }
+      if (inApp) {
+        addCheck(
+          '内置浏览器提示',
+          false,
+          '键盘语音可用≠网页语音；请用 Safari/Chrome 打开本页'
+        );
+      }
+
+      function log(msg) {
+        logEl.textContent = (logEl.textContent === '等待操作…' ? '' : logEl.textContent + '\n') + msg;
+      }
+
+      const SERVER_STT_RATE = 16000;
+      const RECORDER_MIMES = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'];
+
+      function pickMime() {
+        if (!window.MediaRecorder?.isTypeSupported) return '';
+        for (const t of RECORDER_MIMES) {
+          if (MediaRecorder.isTypeSupported(t)) return t;
+        }
+        return '';
+      }
+
+      function mixMono(buf) {
+        if (buf.numberOfChannels === 1) return buf.getChannelData(0);
+        const L = buf.getChannelData(0);
+        const R = buf.numberOfChannels > 1 ? buf.getChannelData(1) : L;
+        const o = new Float32Array(buf.length);
+        for (let i = 0; i < buf.length; i++) o[i] = (L[i] + R[i]) * 0.5;
+        return o;
+      }
+
+      function resample(samples, from, to) {
+        if (from === to) return samples;
+        const n = Math.max(1, Math.round((samples.length * to) / from));
+        const o = new Float32Array(n);
+        const r = from / to;
+        for (let i = 0; i < n; i++) {
+          const p = i * r;
+          const idx = Math.floor(p);
+          const f = p - idx;
+          o[i] = (samples[idx] ?? 0) * (1 - f) + (samples[Math.min(idx + 1, samples.length - 1)] ?? 0) * f;
+        }
+        return o;
+      }
+
+      function toWav(samples, rate) {
+        const len = samples.length * 2;
+        const b = new ArrayBuffer(44 + len);
+        const v = new DataView(b);
+        const w = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+        w(0, 'RIFF'); v.setUint32(4, 36 + len, true); w(8, 'WAVE'); w(12, 'fmt ');
+        v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+        v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true);
+        v.setUint16(32, 2, true); v.setUint16(34, 16, true); w(36, 'data'); v.setUint32(40, len, true);
+        let off = 44;
+        for (let i = 0; i < samples.length; i++) {
+          const s = Math.max(-1, Math.min(1, samples[i]));
+          v.setInt16(off, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+          off += 2;
+        }
+        return new Blob([b], { type: 'audio/wav' });
+      }
+
+      async function blobToWav16k(blob) {
+        const ab = await blob.arrayBuffer();
+        const ctx = new AudioContext();
+        try {
+          const decoded = await ctx.decodeAudioData(ab.slice(0));
+          const mono = mixMono(decoded);
+          const rs = resample(mono, decoded.sampleRate, SERVER_STT_RATE);
+          return toWav(rs, SERVER_STT_RATE);
+        } finally {
+          await ctx.close();
+        }
+      }
+
+      let serverRecording = false;
+      let serverRec = null;
+      let serverStream = null;
+      let serverChunks = [];
+
+      document.getElementById('server-stt-btn').addEventListener('click', async () => {
+        const btn = document.getElementById('server-stt-btn');
+        if (!window.MediaRecorder || !navigator.mediaDevices?.getUserMedia) {
+          log('服务端 STT：MediaRecorder 不可用');
+          return;
+        }
+        if (!window.isSecureContext) {
+          log('服务端 STT：需要 HTTPS');
+          return;
+        }
+        if (!serverRecording) {
+          try {
+            serverStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const mime = pickMime();
+            serverChunks = [];
+            serverRec = mime
+              ? new MediaRecorder(serverStream, { mimeType: mime })
+              : new MediaRecorder(serverStream);
+            serverRec.ondataavailable = (e) => { if (e.data.size) serverChunks.push(e.data); };
+            serverRec.start();
+            serverRecording = true;
+            btn.textContent = '录音中（再点识别）';
+            log('服务端 STT：开始录音，请说 1–2 秒…');
+          } catch (err) {
+            log('服务端 STT 录音失败：' + (err.name || err.message));
+          }
+          return;
+        }
+        serverRecording = false;
+        btn.textContent = '测试服务端语音识别（阿里云）';
+        btn.disabled = true;
+        log('服务端 STT：正在识别…');
+        try {
+          const blob = await new Promise((resolve, reject) => {
+            serverRec.onstop = () =>
+              resolve(new Blob(serverChunks, { type: serverRec.mimeType || 'audio/webm' }));
+            serverRec.onerror = () => reject(new Error('recorder error'));
+            serverRec.stop();
+          });
+          serverStream.getTracks().forEach((t) => t.stop());
+          const wav = await blobToWav16k(blob);
+          const fd = new FormData();
+          fd.append('audio', wav, 'test.wav');
+          const fetchOpts = { method: 'POST', body: fd };
+          if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
+            fetchOpts.signal = AbortSignal.timeout(60000);
+          }
+          const res = await fetch('/api/speech-to-text', fetchOpts);
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            log('服务端 STT 失败 HTTP ' + res.status + ': ' + (data.error || ''));
+          } else {
+            log('服务端 STT 结果: ' + (data.text || '(空)'));
+          }
+        } catch (err) {
+          log('服务端 STT 异常: ' + (err.message || err));
+        } finally {
+          btn.disabled = false;
+          serverRec = null;
+          serverStream = null;
+          serverChunks = [];
+        }
+      });
+
+      document.getElementById('perm-btn').addEventListener('click', async () => {
+        if (!navigator.mediaDevices?.getUserMedia) {
+          micPermission = 'unsupported';
+          log('getUserMedia 不可用');
+          updateDiagSummary();
+          return;
+        }
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          stream.getTracks().forEach((t) => t.stop());
+          micPermission = 'granted';
+          log('麦克风权限：已允许（getUserMedia 成功）');
+        } catch (err) {
+          micPermission = err.name === 'NotAllowedError' ? 'denied' : 'error';
+          log('麦克风权限：' + (err.name || err.message));
+        }
+        updateDiagSummary();
+      });
+
+      const micBtn = document.getElementById('mic-btn');
+      const micToggleBtn = document.getElementById('mic-toggle-btn');
+      let rec = null;
+      let holding = false;
+      let toggleOn = false;
+      let noResultTimer = null;
+
+      function scheduleNoResultHint() {
+        clearTimeout(noResultTimer);
+        noResultTimer = setTimeout(() => {
+          if (onresultEver || !holding && !toggleOn) return;
+          if (micPermission === 'granted') {
+            if (isChromeAndroid()) {
+              log('3s 无 onresult：安卓 Chrome 在大陆常因 Google 服务被阻断（permission: ok）');
+            } else {
+              log('3s 无 onresult：麦克风可能正常，但语音识别服务无响应');
+            }
+          } else {
+            log('3s 无 onresult：请先检测麦克风权限');
+          }
+          updateDiagSummary();
+        }, 3000);
+      }
+
+      if (SpeechRecognition && window.isSecureContext) {
+        rec = new SpeechRecognition();
+        rec.lang = 'zh-CN';
+        rec.interimResults = true;
+        rec.onstart = () => {
+          listenStartedAt = Date.now();
+          scheduleNoResultHint();
+        };
+        rec.onresult = (e) => {
+          onresultEver = true;
+          clearTimeout(noResultTimer);
+          let t = '';
+          for (let i = e.resultIndex; i < e.results.length; i++) t += e.results[i][0].transcript;
+          log('onresult: ' + t);
+          updateDiagSummary();
+        };
+        const errHint = {
+          'not-allowed': '麦克风权限未开启',
+          'service-not-allowed': '禁止语音服务（HTTPS/浏览器策略）',
+          'no-speech': '未检测到说话内容（对着麦说 1–2 秒）',
+          'audio-capture': '无法访问麦克风',
+          network: '网络错误（识别服务不可达）',
+          'service-not-available': '语音服务不可用',
+        };
+        rec.onerror = (e) => {
+          clearTimeout(noResultTimer);
+          log('onerror: ' + e.error + (errHint[e.error] ? ' — ' + errHint[e.error] : ''));
+          if (e.error === 'network' && micPermission === 'granted') {
+            log('提示：network 错误 + 权限正常 → 多为识别服务器被阻断，非麦克风问题');
+          }
+          updateDiagSummary();
+        };
+        rec.onend = () => {
+          clearTimeout(noResultTimer);
+          micBtn.textContent = '按住测试麦克风';
+          const elapsed = listenStartedAt ? Date.now() - listenStartedAt : 0;
+          if ((holding || toggleOn) && elapsed >= 800 && !onresultEver && micPermission === 'granted') {
+            log('结束：permission ok，onresult never（' + Math.round(elapsed / 1000) + 's）');
+            updateDiagSummary();
+          }
+          if (holding) {
+            try { rec.start(); micBtn.textContent = '录音中…'; scheduleNoResultHint(); } catch (err) { log('重启失败: ' + err.message); }
+          }
+        };
+
+        const start = (e) => {
+          e.preventDefault();
+          holding = true;
+          try {
+            rec.abort();
+          } catch (_) {}
+          rec.start();
+          micBtn.textContent = '录音中…';
+          log('开始识别…');
+        };
+        const stop = (e) => {
+          e.preventDefault();
+          holding = false;
+          rec.stop();
+          micBtn.textContent = '按住测试麦克风';
+          log('停止识别');
+        };
+        micBtn.addEventListener('touchstart', start, { passive: false });
+        micBtn.addEventListener('touchend', stop, { passive: false });
+        micBtn.addEventListener('pointerdown', (e) => {
+          if (e.pointerType === 'touch') return;
+          start(e);
+        });
+        micBtn.addEventListener('pointerup', (e) => {
+          if (e.pointerType === 'touch') return;
+          stop(e);
+        });
+
+        micToggleBtn.addEventListener('click', () => {
+          if (toggleOn) {
+            toggleOn = false;
+            rec.stop();
+            micToggleBtn.textContent = '点击开关测试';
+            log('开关：已停止');
+          } else {
+            toggleOn = true;
+            try { rec.abort(); } catch (_) {}
+            rec.start();
+            micToggleBtn.textContent = '录音中（再点停止）';
+            log('开关：已开始，请说 1–2 秒…');
+            scheduleNoResultHint();
+          }
+        });
+      } else {
+        micBtn.disabled = true;
+        micToggleBtn.disabled = true;
+        if (inApp) log(inApp + '：不支持网页 SpeechRecognition，请用系统浏览器打开');
+        else if (!window.isSecureContext) log('非 HTTPS 安全上下文，网页语音不可用');
+        else log('当前浏览器不支持 SpeechRecognition');
+      }
+
+      document.getElementById('speak-btn').addEventListener('click', () => {
+        if (!window.speechSynthesis) return;
+        window.speechSynthesis.cancel();
+        const u = new SpeechSynthesisUtterance('语音朗读测试正常。');
+        u.lang = 'zh-CN';
+        window.speechSynthesis.speak(u);
+        log('已播放朗读测试');
+      });
+
+      updateDiagSummary();
+    </script>
+  </body>
+</html>

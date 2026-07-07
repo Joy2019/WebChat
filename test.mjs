@@ -46,6 +46,19 @@ async function run() {
     detail: `HTTP ${r3.status}, title=${s3.title}`,
   });
 
+  // ③b 持久化：新会话含开场白消息（SQLite 读写）
+  const openingOk =
+    Array.isArray(s3.messages) &&
+    s3.messages.length >= 1 &&
+    s3.messages[0].role === 'assistant' &&
+    typeof s3.messages[0].content === 'string' &&
+    s3.messages[0].content.length > 0;
+  results.push({
+    name: '持久化：新会话含开场白消息',
+    pass: openingOk,
+    detail: `messages=${s3.messages?.length ?? 0}`,
+  });
+
   // ④ GET /sessions 列表中应包含刚建会话
   const r4 = await req('GET', '/sessions');
   const list = JSON.parse(r4.body);
@@ -77,6 +90,22 @@ async function run() {
     name: 'POST /chat/stream 无效 sessionId → 400',
     pass: r7.status === 400,
     detail: `HTTP ${r7.status}`,
+  });
+
+  // ⑧ GET /voice-test.html 语音检测页可访问
+  const r8 = await req('GET', '/voice-test.html');
+  results.push({
+    name: 'GET /voice-test.html 语音检测页可访问',
+    pass: r8.status === 200 && r8.body.includes('SpeechRecognition'),
+    detail: `HTTP ${r8.status}`,
+  });
+
+  // ⑨ POST /api/speech-to-text 无音频 → 400/503
+  const r9 = await req('POST', '/api/speech-to-text');
+  results.push({
+    name: 'POST /api/speech-to-text 无音频 → 4xx',
+    pass: r9.status === 400 || r9.status === 503,
+    detail: `HTTP ${r9.status}`,
   });
 
   let passed = 0;
