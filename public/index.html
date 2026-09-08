@@ -147,7 +147,36 @@
       <img id="image-modal-img" alt="预览图片" />
     </div>
 
+    <div id="voice-dialogue-overlay" class="voice-dialogue-overlay" hidden aria-hidden="true">
+      <div class="voice-dialogue-panel" role="dialog" aria-modal="true" aria-labelledby="voice-dialogue-title">
+        <header class="voice-dialogue-header">
+          <div class="voice-dialogue-heading">
+            <h2 id="voice-dialogue-title">语音对话</h2>
+            <p id="voice-dialogue-topic" class="voice-dialogue-topic"></p>
+          </div>
+          <button type="button" id="voice-dialogue-close" class="ghost voice-dialogue-close" title="结束并返回文字聊天" aria-label="结束语音对话">✕</button>
+        </header>
+
+        <div class="voice-dialogue-body">
+          <div id="voice-dialogue-orb" class="voice-dialogue-orb" data-state="idle" aria-hidden="true"></div>
+          <p id="voice-dialogue-state" class="voice-dialogue-state">准备中…</p>
+          <p id="voice-dialogue-status" class="voice-dialogue-status" aria-live="polite"></p>
+          <div id="voice-dialogue-transcript" class="voice-dialogue-transcript" aria-live="polite"></div>
+        </div>
+
+        <footer class="voice-dialogue-footer">
+          <button type="button" id="voice-dialogue-mute" class="voice-dialogue-mute" aria-pressed="false" title="静音麦克风">🎤 静音</button>
+          <button type="button" id="voice-dialogue-end" class="voice-dialogue-end" title="结束语音对话">结束对话</button>
+        </footer>
+      </div>
+    </div>
+
     <script src="app.js"></script>
+    <script type="module">
+      import { VoiceDialogueSession, checkVoiceDialogueAvailable } from './voice-dialogue.js';
+      window.AIChaterVoice = { VoiceDialogueSession, checkVoiceDialogueAvailable };
+      window.dispatchEvent(new Event('aichater-voice-ready'));
+    </script>
     <script>
       (function () {
         var el = document.getElementById('protocol-hint');

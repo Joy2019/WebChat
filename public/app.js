@@ -24,6 +24,15 @@ const sidebarBackdrop = document.getElementById('sidebar-backdrop');
 const voiceInputBtn = document.getElementById('voice-input-btn');
 const voiceOutputBtn = document.getElementById('voice-output-btn');
 const uploadBtn = document.getElementById('upload-btn');
+const voiceDialogueOverlay = document.getElementById('voice-dialogue-overlay');
+const voiceDialogueTopic = document.getElementById('voice-dialogue-topic');
+const voiceDialogueState = document.getElementById('voice-dialogue-state');
+const voiceDialogueStatus = document.getElementById('voice-dialogue-status');
+const voiceDialogueTranscript = document.getElementById('voice-dialogue-transcript');
+const voiceDialogueOrb = document.getElementById('voice-dialogue-orb');
+const voiceDialogueClose = document.getElementById('voice-dialogue-close');
+const voiceDialogueMute = document.getElementById('voice-dialogue-mute');
+const voiceDialogueEnd = document.getElementById('voice-dialogue-end');
 const APP_CONFIG_DEFAULTS = {
   appTitle: '过程控制实验AI智能助手',
   logoUrl: '/assets/logo.png',
@@ -578,7 +587,11 @@ function renderSessions() {
   sessions.forEach((s) => {
     const item = document.createElement('div');
     item.className = `session-item ${s.id === currentSessionId ? 'active' : ''}`;
-    item.addEventListener('click', () => switchSession(s.id));
+    // 点击话题（会话）→ 切换文字会话并进入 Web 语音对话
+    item.addEventListener('click', async () => {
+      await switchSession(s.id);
+      await enterVoiceDialogueForSession(s);
+    });
 
     const title = document.createElement('div');
     title.className = 'session-title';
@@ -622,6 +635,7 @@ function renderSessions() {
         if (currentSessionId === s.id) {
           currentSessionId = null;
           clearChat();
+          await exitVoiceDialogue();
         }
         await fetchSessions();
       } catch (err) {
@@ -2047,12 +2061,209 @@ function initWebSpeechVoiceInput() {
 initVoiceOutput();
 initVoiceInput();
 
+// ===== Web 语音对话（点击话题 / 会话 → LiveKit 双工）=====
+let voiceDialogueSession = null;
+let voiceDialogueMicMuted = false;
+let voiceDialogueOpening = false;
+/** @type {{ enabled?: boolean } | null} */
+let voiceDialogueStatusCache = null;
+
+function waitForVoiceModule() {
+  if (window.AIChaterVoice?.VoiceDialogueSession) {
+    return Promise.resolve(window.AIChaterVoice);
+  }
+  return new Promise((resolve) => {
+    const onReady = () => {
+      window.removeEventListener('aichater-voice-ready', onReady);
+      resolve(window.AIChaterVoice);
+    };
+    window.addEventListener('aichater-voice-ready', onReady, { once: true });
+    // 模块脚本失败时也不要永远挂起
+    setTimeout(() => {
+      window.removeEventListener('aichater-voice-ready', onReady);
+      resolve(window.AIChaterVoice || null);
+    }, 8000);
+  });
+}
+
+async function ensureVoiceDialogueAvailable() {
+  if (voiceDialogueStatusCache) return voiceDialogueStatusCache;
+  try {
+    const mod = await waitForVoiceModule();
+    if (mod?.checkVoiceDialogueAvailable) {
+      voiceDialogueStatusCache = await mod.checkVoiceDialogueAvailable();
+    } else {
+      const res = await fetch('/api/voice/status');
+      voiceDialogueStatusCache = res.ok ? await res.json() : { enabled: false };
+    }
+  } catch {
+    voiceDialogueStatusCache = { enabled: false };
+  }
+  return voiceDialogueStatusCache;
+}
+
+function setVoiceDialogueVisible(visible) {
+  if (!voiceDialogueOverlay) return;
+  voiceDialogueOverlay.hidden = !visible;
+  voiceDialogueOverlay.setAttribute('aria-hidden', visible ? 'false' : 'true');
+  document.body.classList.toggle('voice-dialogue-open', !!visible);
+}
+
+function clearVoiceDialogueTranscript() {
+  if (voiceDialogueTranscript) voiceDialogueTranscript.innerHTML = '';
+}
+
+function appendVoiceTranscriptLine(role, text, final) {
+  if (!voiceDialogueTranscript || !text) return;
+  const last = voiceDialogueTranscript.lastElementChild;
+  const sameRole = last && last.dataset.role === role;
+  const wasInterim = last && last.classList.contains('interim');
+
+  if (sameRole && (wasInterim || !final)) {
+    last.textContent = `${role === 'ai' ? 'AI' : '你'}：${text}`;
+    last.classList.toggle('interim', !final);
+    if (final) last.classList.remove('interim');
+  } else {
+    const line = document.createElement('div');
+    line.className = `voice-dialogue-line ${role}${final ? '' : ' interim'}`;
+    line.dataset.role = role;
+    line.textContent = `${role === 'ai' ? 'AI' : '你'}：${text}`;
+    voiceDialogueTranscript.appendChild(line);
+  }
+  voiceDialogueTranscript.scrollTop = voiceDialogueTranscript.scrollHeight;
+}
+
+function updateVoiceMuteButton() {
+  if (!voiceDialogueMute) return;
+  voiceDialogueMute.classList.toggle('is-muted', voiceDialogueMicMuted);
+  voiceDialogueMute.setAttribute('aria-pressed', voiceDialogueMicMuted ? 'true' : 'false');
+  voiceDialogueMute.textContent = voiceDialogueMicMuted ? '🔇 已静音' : '🎤 静音';
+  voiceDialogueMute.title = voiceDialogueMicMuted ? '取消静音' : '静音麦克风';
+}
+
+async function exitVoiceDialogue() {
+  const session = voiceDialogueSession;
+  voiceDialogueSession = null;
+  voiceDialogueMicMuted = false;
+  updateVoiceMuteButton();
+  setVoiceDialogueVisible(false);
+  if (session) {
+    try {
+      await session.disconnect();
+    } catch (e) {
+      console.warn('[voice-dialogue] disconnect', e);
+    }
+  }
+}
+
+async function enterVoiceDialogueForSession(sessionMeta) {
+  if (!voiceDialogueOverlay || voiceDialogueOpening) return;
+
+  const status = await ensureVoiceDialogueAvailable();
+  if (!status?.enabled) {
+    if (typeof showVoiceToast === 'function') {
+      showVoiceToast('语音对话未配置：请在服务端设置 VA_CLIENT_ID / VA_ACCESS_KEY', 4500);
+    } else {
+      alert('语音对话未配置：请在服务端 .env 设置 VA_CLIENT_ID 与 VA_ACCESS_KEY');
+    }
+    return;
+  }
+
+  if (!window.isSecureContext) {
+    alert('语音对话需要 HTTPS（或 localhost）安全上下文，请使用 https:// 访问。');
+    return;
+  }
+
+  const mod = await waitForVoiceModule();
+  if (!mod?.VoiceDialogueSession) {
+    alert('语音对话模块加载失败，请刷新页面重试');
+    return;
+  }
+
+  voiceDialogueOpening = true;
+  try {
+    await exitVoiceDialogue();
+
+    const title = sessionMeta?.title || '未命名会话';
+    if (voiceDialogueTopic) voiceDialogueTopic.textContent = `话题：${title}`;
+    if (voiceDialogueState) voiceDialogueState.textContent = '连接中…';
+    if (voiceDialogueStatus) voiceDialogueStatus.textContent = '';
+    if (voiceDialogueOrb) voiceDialogueOrb.dataset.state = 'initializing';
+    clearVoiceDialogueTranscript();
+    voiceDialogueMicMuted = false;
+    updateVoiceMuteButton();
+    setVoiceDialogueVisible(true);
+    closeMobileOverlays();
+    window.speechSynthesis?.cancel?.();
+
+    const session = new mod.VoiceDialogueSession({
+      onAgentState: (state, label) => {
+        if (voiceDialogueOrb) voiceDialogueOrb.dataset.state = state || 'idle';
+        if (voiceDialogueState) voiceDialogueState.textContent = label || state || '';
+      },
+      onTranscript: (role, text, final) => {
+        appendVoiceTranscriptLine(role, text, final);
+      },
+      onStatus: (message) => {
+        if (voiceDialogueStatus) voiceDialogueStatus.textContent = message || '';
+      },
+      onError: (err) => {
+        if (voiceDialogueStatus) {
+          voiceDialogueStatus.textContent = err?.message || String(err);
+        }
+      },
+      onDisconnected: () => {
+        if (voiceDialogueSession) {
+          voiceDialogueStatus && (voiceDialogueStatus.textContent = '连接已断开');
+        }
+      },
+    });
+    voiceDialogueSession = session;
+    await session.connect();
+  } catch (e) {
+    console.error('[voice-dialogue]', e);
+    const msg = e?.message || String(e);
+    if (voiceDialogueStatus) voiceDialogueStatus.textContent = msg;
+    alert(`进入语音对话失败：${msg}`);
+    await exitVoiceDialogue();
+  } finally {
+    voiceDialogueOpening = false;
+  }
+}
+
+voiceDialogueClose?.addEventListener('click', () => {
+  exitVoiceDialogue();
+});
+voiceDialogueEnd?.addEventListener('click', () => {
+  exitVoiceDialogue();
+});
+voiceDialogueMute?.addEventListener('click', async () => {
+  if (!voiceDialogueSession?.connected) return;
+  try {
+    voiceDialogueMicMuted = !voiceDialogueMicMuted;
+    await voiceDialogueSession.setMicrophoneEnabled(!voiceDialogueMicMuted);
+    updateVoiceMuteButton();
+  } catch (e) {
+    voiceDialogueMicMuted = !voiceDialogueMicMuted;
+    updateVoiceMuteButton();
+    alert(`麦克风切换失败：${e?.message || e}`);
+  }
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && voiceDialogueOverlay && !voiceDialogueOverlay.hidden) {
+    exitVoiceDialogue();
+  }
+});
+
 // 初始化（等待配置与会话列表/自动新建完成后再交互，避免未选中会话就发送）
 loadLinks();
 (async () => {
   try {
     await loadAppConfig();
     await fetchSessions();
+    // 预热语音对话可用性（不进入房间）
+    ensureVoiceDialogueAvailable().catch(() => {});
   } catch (e) {
     console.error('初始化失败', e);
   }

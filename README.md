@@ -1,6 +1,6 @@
 # 过程控制实验 AI 智能助手（AIChater）
 
-> 基于 [Coze](https://www.coze.cn) 开放平台的 AI 多模态对话应用：纯 HTML/CSS/JS 前端 + Node.js/Express 后端，支持流式对话、图片识别、知识库引用、多会话管理、移动端 H5、语音输入/朗读与 SQLite 持久化。
+> 基于 [Coze](https://www.coze.cn) 开放平台的 AI 多模态对话应用：纯 HTML/CSS/JS 前端 + Node.js/Express 后端，支持流式对话、图片识别、知识库引用、多会话管理、移动端 H5、语音输入/朗读、**Web 语音对话（LiveKit 可打断双工）** 与 SQLite 持久化。
 
 **生产访问地址**：<https://aigckzsy.sebri.cn>（标准 HTTPS 443，无需 `:3000`）
 
@@ -29,6 +29,7 @@ AIChater 面向实验教学与内部问答场景，将 Coze 智能体封装为�
 | **六套主题** | 亮色 / 暗色 / 科技蓝 / 护眼绿 / 紫罗兰 / 暖橙色，偏好写入 localStorage |
 | **语音输入（STT）** | 默认阿里云一句话识别（服务端）；iPhone Safari 可走 Web Speech 快速路径；无响应时自动降级服务端 |
 | **语音朗读（TTS）** | 输入栏旁 🔊/🔇 开关，朗读 AI 回复（浏览器 `speechSynthesis`） |
+| **Web 语音对话** | 点击左侧**会话/话题**进入 LiveKit 双工语音（可打断、中英双语）；密钥由服务端代持 `/api/voice/token` |
 | **品牌自定义** | `public/config.json` 配置标题、Logo、助手名 |
 | **第三方链接区** | `public/links.json` 配置右侧链接列表及显隐 |
 | **Nginx 生产部署** | `BEHIND_NGINX=1`、`ENABLE_HTTPS=0`、`PUBLIC_URL` 配合反向代理 |
@@ -45,6 +46,7 @@ AIChater/
 │   ├── voice-test.html     # 语音能力诊断页（STT/TTS 独立测试）
 │   ├── style.css           # 全局样式（六套主题 CSS 变量 + 移动端抽屉）
 │   ├── app.js              # 前端逻辑（会话、流式、语音、主题、移动端）
+│   ├── voice-dialogue.js   # LiveKit Web 语音对话（ESM，CDN 加载 livekit-client）
 │   ├── config.json         # 品牌配置（标题 / Logo / 助手名）
 │   ├── links.json          # 第三方链接配置
 │   └── assets/             # 静态资源（如 logo.png）
@@ -53,6 +55,7 @@ AIChater/
 ├── lib/
 │   ├── sessions-db.js      # 会话/消息 SQLite 存储层
 │   ├── aliyun-stt.js       # 阿里云一句话识别封装
+│   ├── voice-token.js      # 语音助手 /token 服务端代理
 │   └── upload-trace.js     # 图片上传调试日志
 ├── scripts/
 │   ├── mirror-push.ps1     # Windows：双端 push（origin + gitee）
@@ -155,6 +158,20 @@ node test.mjs
 
 控制台：<https://nls-portal.console.aliyun.com/>。未配置时 `/api/speech-to-text` 返回 503，服务仍可正常启动。
 
+### Web 语音对话（LiveKit）
+
+管理员开通接入端后，将凭证写入 `.env`（**不要**提交 `.env`）：
+
+| 变量 | 说明 |
+| --- | --- |
+| `VA_CLIENT_ID` | 接入端 ID（`c` + 16 位十六进制） |
+| `VA_ACCESS_KEY` | 接入密钥（`va_` 开头，仅服务端保管） |
+| `VA_TOKEN_URL` | 可选，默认 `https://10.63.7.246:8443/token` |
+| `VA_LIVEKIT_WS_URL` | 可选，浏览器 LiveKit 信令，默认 `wss://10.63.7.246:8443` |
+| `VA_TOKEN_INSECURE_TLS=1` | 可选，开发时信任语音助手自签证书（仅内网调试） |
+
+配置后点击左侧会话列表中的**话题（会话项）**即可进入双工语音对话；关闭浮层后继续文字聊天。未配置时点击仍可切换文字会话，并提示需配置环境变量。
+
 ### 图片与调试
 
 | 变量 | 说明 |
@@ -232,6 +249,15 @@ node test.mjs
 ### 语音朗读（TTS）
 
 点击输入栏旁 **🔊/🔇** 按钮开关。开启后 AI 回复完成时自动朗读（`speechSynthesis`）；偏好保存在 `localStorage`。
+
+### Web 语音对话（可打断双工）
+
+1. 在 `.env` 配置 `VA_CLIENT_ID`、`VA_ACCESS_KEY`（及可选的 `VA_TOKEN_URL` / `VA_LIVEKIT_WS_URL`）后重启服务。
+2. 使用 **HTTPS** 打开页面（麦克风与 WebRTC 需要安全上下文）。
+3. 在左侧 **会话列表** 点击某一话题/会话 → 弹出语音对话浮层，自动连接 LiveKit、开启带回声消除的麦克风。
+4. 对着麦克风说话即可；AI 播放时可插话打断。点「结束对话」或 ✕ 返回文字聊天。
+
+服务端代持密钥：前端只调用 `GET /api/voice/token` 获取 15 分钟短时 JWT，不会接触 `access key`。
 
 ### 语音诊断页
 
@@ -407,7 +433,9 @@ sudo nginx -t && sudo systemctl reload nginx
 | `DELETE` | `/sessions` | 删除全部会话 |
 | `POST` | `/chat/stream` | 流式对话，`multipart/form-data`：`sessionId`、`message`、`image?`，NDJSON 流返回 |
 | `POST` | `/api/speech-to-text` | 语音转文字，`multipart/form-data` 字段 `audio` |
-| `GET` | `/api/health` | 健康检查（含 Coze Token、imgbb、aliyunStt 等状态） |
+| `GET` | `/api/voice/status` | 语音对话是否已配置（不含密钥） |
+| `GET` | `/api/voice/token` | 代持密钥换取 LiveKit 短时 token + `wss` 地址 |
+| `GET` | `/api/health` | 健康检查（含 Coze Token、imgbb、aliyunStt、voiceDialogue 等状态） |
 | `GET` | `/api/debug/upload-log` | 上传日志尾部（仅 `DEBUG_UPLOAD=1` 时可用） |
 
 ### `/chat/stream` NDJSON 事件
@@ -450,6 +478,7 @@ cp data/sessions.db-shm /var/backups/ 2>/dev/null || true
 | 会话存储 | SQLite（`better-sqlite3`，`data/sessions.db`，WAL 模式） |
 | 语音识别 | 阿里云 NLS 一句话识别 + Web Speech API 备选 |
 | 语音朗读 | 浏览器 `speechSynthesis` |
+| Web 语音对话 | LiveKit WebRTC（`livekit-client`）+ 服务端 `/token` 代理 |
 | 图片托管 | Coze 文件上传 + imgbb（可选公开 URL） |
 | 进程守护 | PM2（生产部署） |
 | Web 服务 | Nginx（反向代理 + SSL 终止） |

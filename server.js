@@ -35,6 +35,11 @@ import {
   updateSessionTitleIfDefault,
   touchSession,
 } from './lib/sessions-db.js';
+import {
+  fetchVoiceSessionToken,
+  getVoiceDialoguePublicConfig,
+  isVoiceDialogueConfigured,
+} from './lib/voice-token.js';
 
 dotenv.config();
 
@@ -381,6 +386,9 @@ if (!isAliyunSttConfigured()) {
   const sttConfigWarn = validateAliyunSttConfig();
   if (sttConfigWarn) console.warn(`[WARN] ${sttConfigWarn}`);
 }
+if (!isVoiceDialogueConfigured()) {
+  console.warn('[WARN] VA_CLIENT_ID / VA_ACCESS_KEY 未配置，点击话题进入语音对话将不可用');
+}
 
 app.use(express.static('public'));
 const PROJECT_ASSETS_DIR = path.join(process.cwd(), 'assets');
@@ -564,11 +572,35 @@ app.get('/api/health', (_req, res) => {
     cozeBot: !!BOT_ID,
     imgbb: !!process.env.IMGBB_API_KEY,
     aliyunStt: isAliyunSttConfigured(),
+    voiceDialogue: isVoiceDialogueConfigured(),
     https: !BEHIND_NGINX && process.env.ENABLE_HTTPS !== '0',
     behindNginx: BEHIND_NGINX,
     publicUrl: PUBLIC_URL || null,
     tunnel: process.env.ENABLE_LOCALTUNNEL === '1',
   });
+});
+
+/** 语音对话：公开配置（不含密钥） */
+app.get('/api/voice/status', (_req, res) => {
+  res.json(getVoiceDialoguePublicConfig());
+});
+
+/**
+ * 语音对话 Token 代理（模式 A：密钥仅存服务端）
+ * 前端用返回的 token + url 直连 LiveKit WebRTC。
+ */
+app.get('/api/voice/token', async (_req, res) => {
+  try {
+    const data = await fetchVoiceSessionToken();
+    res.json(data);
+  } catch (e) {
+    const status = e?.status || 500;
+    console.error('[VOICE TOKEN]', e?.message || e, e?.upstream || '');
+    res.status(status).json({
+      error: e?.code || 'token_failed',
+      message: e?.message || '获取语音会话 Token 失败',
+    });
+  }
 });
 
 app.post('/api/speech-to-text', (req, res, next) => {
